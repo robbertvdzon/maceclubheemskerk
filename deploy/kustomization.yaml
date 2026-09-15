@@ -2,8 +2,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: maceclubheemskerk
 resources:
-  - app.yaml
-  - secrets
+- app.yaml
+- secrets
 images:
-  - name: ghcr.io/robbertvdzon/maceclubheemskerk
-    newTag: bootstrap
+- digest: sha256:5c7fa6252853390c1d95729937c501c325e267a9a4deb81e02aa7ec75229fa1c
+  name: ghcr.io/robbertvdzon/maceclubheemskerk
+  newName: ghcr.io/robbertvdzon/maceclubheemskerk
