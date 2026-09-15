@@ -2,6 +2,7 @@
 """Verify a local runtime container under OpenShift-like restrictions."""
 
 import json
+from pathlib import Path
 import subprocess
 import sys
 import time
@@ -30,6 +31,8 @@ def main():
     image = sys.argv[1]
     container = subprocess.check_output([
         "docker", "run", "-d", "--read-only", "--user", "1000780000:0",
+        "--memory", "1g", "--cpus", "2",
+        "--mount", f"type=bind,src={Path(__file__).resolve().parents[1] / 'internal/content/testdata/phone.mov'},dst=/smoke-input.mov,readonly",
         "--tmpfs", "/data:rw,noexec,nosuid,size=64m,mode=0770,uid=1000780000,gid=0",
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
         "-p", "127.0.0.1::8080", image,
@@ -49,6 +52,7 @@ def main():
         for case in [
             ("/", "GET", 200, "text/html"),
             ("/style.css", "GET", 200, "text/css"),
+            ("/video-upload.js", "GET", 200, "javascript"),
             ("/healthz", "GET", 200, "application/json"),
             ("/api/media", "GET", 200, "application/json"),
             ("/favicon.svg", "GET", 200, "image/svg+xml"),
@@ -57,6 +61,17 @@ def main():
             ("/", "HEAD", 200, "text/html"),
         ]:
             check(base, *case)
+        subprocess.run([
+            "docker", "exec", container, "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+            "-threads", "2", "-i", "/smoke-input.mov", "-vf", "format=yuv420p", "-an",
+            "-c:v", "libx264", "-threads", "2", "/data/smoke.mp4",
+        ], check=True, timeout=30)
+        probe = json.loads(subprocess.check_output([
+            "docker", "exec", container, "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=codec_name,pix_fmt", "-of", "json", "/data/smoke.mp4",
+        ], text=True, timeout=10))
+        assert probe["streams"][0] == {"codec_name": "h264", "pix_fmt": "yuv420p"}
+        print("HEVC conversion under runtime restrictions: OK")
         subprocess.run(["docker", "stop", "--time", "15", container], check=True, stdout=subprocess.DEVNULL)
         code = subprocess.check_output(["docker", "inspect", "--format", "{{.State.ExitCode}}", container], text=True).strip()
         assert code == "0", code

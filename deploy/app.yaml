@@ -57,11 +57,11 @@ spec:
               drop: [ALL]
           resources:
             requests:
-              cpu: 10m
-              memory: 32Mi
+              cpu: 100m
+              memory: 128Mi
             limits:
-              cpu: 250m
-              memory: 256Mi
+              cpu: "2"
+              memory: 1Gi
           readinessProbe:
             httpGet:
               path: /healthz

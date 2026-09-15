@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -36,11 +37,15 @@ type Library struct {
 	Revision int64  `json:"revision"`
 }
 type Store struct {
-	db       *sql.DB
-	dir      string
-	photos   chan struct{}
-	videos   chan struct{}
-	videoDir string
+	db            *sql.DB
+	dir           string
+	photos        chan struct{}
+	videos        chan struct{}
+	videoDir      string
+	uploadMu      sync.Mutex
+	chunkUploads  map[string]*videoUpload
+	uploadWorkers sync.WaitGroup
+	convertVideo  func(context.Context, string, string) error
 }
 
 func Open(path string) (*Store, error) {
@@ -67,7 +72,7 @@ func OpenWithVideoDir(path, videoDir string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db: db, dir: dir, photos: make(chan struct{}, 1), videos: make(chan struct{}, 1), videoDir: videoDir}
+	s := &Store{db: db, dir: dir, photos: make(chan struct{}, 1), videos: make(chan struct{}, 1), videoDir: videoDir, convertVideo: transcodeVideo}
 
 	err = migrate(db)
 	if err != nil {
@@ -84,7 +89,24 @@ func OpenWithVideoDir(path, videoDir string) (*Store, error) {
 	}
 	return s, nil
 }
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error {
+	s.uploadMu.Lock()
+	for _, upload := range s.chunkUploads {
+		if upload.processing {
+			upload.cancel()
+		} else {
+			s.removeUpload(upload)
+		}
+	}
+	s.uploadMu.Unlock()
+	s.uploadWorkers.Wait()
+	s.uploadMu.Lock()
+	for _, upload := range s.chunkUploads {
+		s.removeUpload(upload)
+	}
+	s.uploadMu.Unlock()
+	return s.db.Close()
+}
 func (s *Store) Revision(ctx context.Context) (int64, error) {
 	var n int64
 	err := s.db.QueryRowContext(ctx, "SELECT revision FROM content_state WHERE id=1").Scan(&n)

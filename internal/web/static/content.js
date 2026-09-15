@@ -33,12 +33,12 @@
  function syncMediaType(){
   const kind=$('#media-type').value;const photo=kind==='photo',upload=kind==='upload';
   $('#url-field').hidden=photo||upload;$('#photo-field').hidden=!photo;$('#video-file-field').hidden=!upload;
-  $('#video-url').required=!photo&&!upload;$('#photo-file').required=photo;$('#video-file').required=upload;
+  $('#video-url').required=!photo&&!upload;$('#photo-file').required=photo;$('#video-file').required=upload;$('#video-file').disabled=!upload;$('#photo-file').disabled=!photo;$('#video-url').disabled=photo||upload;
   if(!upload)$('#video-preview').pause();
  }
  function clearVideoPreview(){const v=$('#video-preview');v.pause();v.removeAttribute('src');v.load();v.hidden=true;if(videoURL)URL.revokeObjectURL(videoURL);videoURL='';}
  function openAdd(section){
-  if(!club.canEdit)return;document.querySelectorAll('dialog[open]').forEach(d=>d.close());$('#content-form').reset();$('#section-value').value=section;$('#form-error').textContent='';$('#photo-preview').hidden=true;clearVideoPreview();$('#upload-status').hidden=true;
+  if(!club.canEdit)return;document.querySelectorAll('dialog[open]').forEach(d=>d.close());$('#content-form').reset();$('#section-value').value=section;$('#form-error').textContent='';$('#photo-preview').hidden=true;clearVideoPreview();$('#video-file-info').textContent='';$('#video-file-error').textContent='';$('#video-file').setCustomValidity('');$('#video-file').setAttribute('aria-invalid','false');$('#upload-status').hidden=true;
   if(photoURL){URL.revokeObjectURL(photoURL);photoURL='';}
   $('#add-title').textContent=section==='exercise'?'OEFENING TOEVOEGEN.':'TRAININGSBEELDEN TOEVOEGEN.';$('#add-description').textContent=section==='exercise'?'Deel een YouTube-link of upload je eigen oefenvideo.':'Deel een YouTube-video, eigen video of foto van jullie training.';
   $('#media-type-field').hidden=false;$('#media-type option[value=photo]').hidden=section==='exercise';$('#media-type option[value=photo]').disabled=section==='exercise';$('#category-field').hidden=section!=='exercise';syncMediaType();$('#add-dialog').showModal();
@@ -50,19 +50,20 @@
   photoURL=URL.createObjectURL(file);$('#photo-preview').src=photoURL;$('#photo-preview').hidden=false;
  });
  $('#video-file').addEventListener('change',()=>{
-  clearVideoPreview();$('#form-error').textContent='';const file=$('#video-file').files[0];if(!file)return;
-  if(!/\.mp4$/i.test(file.name)||file.size>90000000||file.size===0){$('#form-error').textContent='Kies een MP4-video van maximaal 90 MB.';$('#video-file').value='';return;}
+  clearVideoPreview();$('#form-error').textContent='';const input=$('#video-file'),file=input.files[0];
+  const error=file?window.MCHVideoUpload.validationError(file):'';
+  input.setCustomValidity(error);input.setAttribute('aria-invalid',String(Boolean(error)));
+  $('#video-file-error').textContent=error;$('#video-file-info').textContent=file?`${file.name} · ${window.MCHVideoUpload.mb(file.size)}`:'';
+  if(!file||error)return;
   videoURL=URL.createObjectURL(file);$('#video-preview').src=videoURL;$('#video-preview').hidden=false;
  });
- function uploadVideo(body){return new Promise((resolve,reject)=>{
-  const xhr=new XMLHttpRequest();activeUpload=xhr;xhr.open('POST','/api/videos');xhr.timeout=600000;
-  $('#upload-status').hidden=false;$('#upload-progress').value=0;$('#upload-message').textContent='Upload starten…';$('#cancel-upload').disabled=false;
-  xhr.upload.onprogress=e=>{if(e.lengthComputable){const percent=Math.min(100,Math.round(e.loaded/e.total*100));$('#upload-progress').value=percent;$('#upload-message').textContent=percent===100?'Controleren en opslaan…':`Uploaden: ${percent}%`;}};
-  xhr.onload=()=>{let data;try{data=JSON.parse(xhr.responseText);}catch{}if(xhr.status>=200&&xhr.status<300)resolve(data);else reject(new Error(data?.error||(xhr.status===413?'De video is te groot. Maximaal 90 MB.':'Uploaden is niet gelukt. Probeer opnieuw.')));};
-  xhr.onerror=()=>reject(new Error('De verbinding is onderbroken. Probeer opnieuw.'));
-  xhr.ontimeout=()=>reject(new Error('De upload duurde te lang. Probeer een kleiner bestand of een snellere verbinding.'));
-  xhr.onabort=()=>reject(new Error('Upload geannuleerd.'));xhr.send(body);
- });}
+ async function uploadVideo(file,data){
+  activeUpload=window.MCHVideoUpload.create();$('#upload-status').hidden=false;$('#cancel-upload').disabled=false;
+  return activeUpload.start(file,data,(percent,message,finishing)=>{
+   $('#upload-progress').value=percent;$('#upload-message').textContent=message;$('#cancel-upload').disabled=finishing;
+  });
+ }
+ $('#video-preview').addEventListener('error',()=>{if($('#video-file').files[0]&&!$('#video-file').validationMessage){$('#video-file-info').textContent+=' · Voorvertoning niet beschikbaar; je kunt de video wel uploaden en laten omzetten.';$('#video-preview').hidden=true;}});
  $('#cancel-upload').addEventListener('click',()=>activeUpload?.abort());
  $('#content-form').addEventListener('submit',async e=>{
   e.preventDefault();if(saving||!club.canEdit)return;
@@ -71,9 +72,9 @@
   if(photo||upload){body=new FormData();for(const [k,v] of Object.entries(data))body.append(k,v);if(upload){body.append('category',section==='exercise'?$('#content-category').value:'');body.append('video',$('#video-file').files[0]);}else body.append('photo',$('#photo-file').files[0]);}
   else{body=JSON.stringify({...data,category:section==='exercise'?$('#content-category').value:'',url:$('#video-url').value.trim()});headers={'Content-Type':'application/json'};}
   saving=true;$('#form-error').textContent='';$('#content-form button[type=submit]').textContent='Opslaan…';$('#add-dialog').querySelectorAll('button,input,select,textarea').forEach(el=>el.disabled=true);
-  try{if(upload)await uploadVideo(body);else await club.api('/api/media',{method:'POST',headers,body});$('#add-dialog').close();category='all';mediaFilter='all';expanded=true;document.querySelectorAll('[data-category],[data-media]').forEach(el=>{const on=el.dataset.category==='all'||el.dataset.media==='all';el.classList.toggle('active',on);el.setAttribute('aria-pressed',String(on));});await refreshLibrary();document.getElementById(section==='exercise'?'oefeningen':'trainingen').scrollIntoView({behavior:'smooth'});toast('Opgeslagen. Je toevoeging staat op de website.');}
+  try{if(upload)await uploadVideo($('#video-file').files[0],{...data,category:section==='exercise'?$('#content-category').value:''});else await club.api('/api/media',{method:'POST',headers,body});$('#add-dialog').close();category='all';mediaFilter='all';expanded=true;document.querySelectorAll('[data-category],[data-media]').forEach(el=>{const on=el.dataset.category==='all'||el.dataset.media==='all';el.classList.toggle('active',on);el.setAttribute('aria-pressed',String(on));});await refreshLibrary();document.getElementById(section==='exercise'?'oefeningen':'trainingen').scrollIntoView({behavior:'smooth'});toast('Opgeslagen. Je toevoeging staat op de website.');}
   catch(error){$('#form-error').textContent=error.message;await club.refreshSession();}
-  finally{activeUpload=null;saving=false;$('#upload-status').hidden=true;$('#add-dialog').querySelectorAll('button,input,select,textarea').forEach(el=>el.disabled=false);$('#media-type option[value=photo]').disabled=$('#section-value').value==='exercise';$('#content-form button[type=submit]').textContent='Toevoegen ↗';}
+  finally{activeUpload=null;saving=false;$('#upload-status').hidden=true;$('#add-dialog').querySelectorAll('button,input,select,textarea').forEach(el=>el.disabled=false);$('#media-type option[value=photo]').disabled=$('#section-value').value==='exercise';$('#content-form button[type=submit]').textContent='Toevoegen ↗';syncMediaType();}
  });
  $('#add-dialog').addEventListener('cancel',e=>{if(saving)e.preventDefault();});
  $('#add-dialog').addEventListener('close',()=>{clearVideoPreview();if(photoURL){URL.revokeObjectURL(photoURL);photoURL='';} $('#photo-preview').hidden=true;});

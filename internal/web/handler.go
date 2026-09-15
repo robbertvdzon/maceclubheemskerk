@@ -31,7 +31,8 @@ func Handler(a *auth.Auth, version string, stores ...*content.Store) http.Handle
 	})
 	for route, file := range map[string]string{
 		"GET /style.css": "static/style.css", "GET /app.js": "static/app.js",
-		"GET /monitor.js": "static/monitor.js", "GET /content.js": "static/content.js",
+		"GET /video-upload.js": "static/video-upload.js",
+		"GET /monitor.js":      "static/monitor.js", "GET /content.js": "static/content.js",
 		"GET /favicon.svg": "static/favicon.svg", "GET /club-logo.png": "static/club-logo.png",
 	} {
 		body, err := assets.ReadFile(file)

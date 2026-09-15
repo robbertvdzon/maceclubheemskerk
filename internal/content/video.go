@@ -29,9 +29,11 @@ func (s *Store) registerVideos(mux *http.ServeMux, a *auth.Auth) {
 		s.uploadVideo(w, r, u)
 	}))
 	mux.HandleFunc("GET /videos/{file}", s.video)
+	s.registerVideoChunks(mux, a)
 }
 
-func (s *Store) videoSpace() error {
+func (s *Store) videoSpace() error { return s.videoSpaceFor(maxVideoBytes) }
+func (s *Store) videoSpaceFor(required int64) error {
 	entries, err := os.ReadDir(s.videoDir)
 	if err != nil {
 		return err
@@ -47,14 +49,14 @@ func (s *Store) videoSpace() error {
 		}
 		used += info.Size()
 	}
-	if used+maxVideoBytes > videoStorageBudget {
+	if used+required > videoStorageBudget {
 		return errors.New("De video-opslag is bijna vol. Er is geen ruimte voor een nieuwe video.")
 	}
 	var stat syscall.Statfs_t
 	if err = syscall.Statfs(s.videoDir, &stat); err != nil {
 		return err
 	}
-	if uint64(stat.Bavail)*uint64(stat.Bsize) < uint64(maxVideoBytes+(128<<20)) {
+	if uint64(stat.Bavail)*uint64(stat.Bsize) < uint64(required+(128<<20)) {
 		return errors.New("Er is onvoldoende vrije opslagruimte voor een nieuwe video.")
 	}
 	return nil

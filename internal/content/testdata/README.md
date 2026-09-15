@@ -5,4 +5,4 @@ H.264 yuv420p + AAC). It contains no personal media. Recreate with:
 ffmpeg -f lavfi -i color=c=olive:s=320x240:d=2 -f lavfi -i sine=frequency=440:duration=2 -c:v libx264 -pix_fmt yuv420p -c:a aac -movflags +faststart sample.mp4
 ```
 
-FFmpeg is only used to create this test fixture; production remains entirely Go.
+`phone.mov` is a synthetic HEVC 10-bit/AAC variant tagged BT.2020 HLG, used to test phone video conversion. Production uses the same FFmpeg codec support, called from Go.
