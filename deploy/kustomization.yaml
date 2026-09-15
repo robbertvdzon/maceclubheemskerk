@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: maceclubheemskerk
 resources:
 - app.yaml
+- route-vdzonsoftware.yaml
 - secrets
 images:
 - digest: sha256:5c7fa6252853390c1d95729937c501c325e267a9a4deb81e02aa7ec75229fa1c

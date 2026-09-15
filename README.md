@@ -77,6 +77,8 @@ De workflow vraagt expliciet `contents: write` voor zijn image-pin-job. Eventuel
 
 ### Domein koppelen
 
+De site is ook bereikbaar via **https://maceclubheemskerk.vdzonsoftware.nl**. Deze extra OpenShift Route gebruikt de bestaande wildcard-DNS en Cloudflare Tunnel voor `*.vdzonsoftware.nl` en werkt onafhankelijk van de koppeling van het eigen domein.
+
 Voeg `maceclubheemskerk.eu` toe aan hetzelfde Cloudflare-account als de gedeelde tunnel. Neem bestaande DNS/mailrecords over en stel de toegewezen Cloudflare-nameservers in bij one.com.
 
 Voeg voor `maceclubheemskerk.eu` én `www.maceclubheemskerk.eu` een hostname met DNS-record toe aan de bestaande tunnel, met bestemming `http://router-internal-default.openshift-ingress.svc.cluster.local:80`. Behoud de oorspronkelijke Host-header. De bestaande wildcard voor `vdzonsoftware.nl` dekt deze namen niet.

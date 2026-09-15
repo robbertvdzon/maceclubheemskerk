@@ -1,0 +1,14 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: maceclubheemskerk-vdzonsoftware
+spec:
+  host: maceclubheemskerk.vdzonsoftware.nl
+  to:
+    kind: Service
+    name: maceclubheemskerk
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Allow
