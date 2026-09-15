@@ -28,7 +28,7 @@ func TestBrowserPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer library.Close()
-	cfg := auth.Config{ClientID: "local-test-only", Origins: []string{"http://localhost:18082"}, MemberEmails: []string{"member@example.test"}}
+	cfg := auth.Config{ClientID: "local-test-only", Origins: []string{"http://127.0.0.1:18082"}, MemberEmails: []string{"member@example.test"}}
 	a := auth.New(cfg, sessions, func(context.Context, string, string, string) (auth.User, error) { return auth.User{}, nil })
 	token, _, err := sessions.Create(auth.User{ID: "local-test-only", Name: "Test clublid", Email: "member@example.test"}, "")
 	if err != nil {

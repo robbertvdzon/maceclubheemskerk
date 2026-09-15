@@ -27,7 +27,7 @@ func main() {
 }
 
 func run() error {
-	library, err := content.Open(env("SQLITE_FILE", "/data/maceclub.sqlite"))
+	library, err := content.OpenWithVideoDir(env("SQLITE_FILE", "/data/maceclub.sqlite"), env("VIDEO_DIR", "/data/videos"))
 	if err != nil {
 		return fmt.Errorf("open content database: %w", err)
 	}

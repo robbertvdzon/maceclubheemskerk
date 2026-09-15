@@ -26,18 +26,23 @@ func (s *Store) Backup(ctx context.Context, destination string) error {
 		return err
 	}
 	defer db.Close()
-	rows, err := db.QueryContext(ctx, "SELECT photo_file FROM media WHERE photo_file<>''")
+	rows, err := db.QueryContext(ctx, "SELECT photo_file,video_file FROM media WHERE photo_file<>'' OR video_file<>''")
 	if err != nil {
 		return err
 	}
-	files := []string{}
+	files := [][2]string{}
 	for rows.Next() {
-		var f string
-		if err = rows.Scan(&f); err != nil {
+		var photo, video string
+		if err = rows.Scan(&photo, &video); err != nil {
 			rows.Close()
 			return err
 		}
-		files = append(files, f)
+		if photo != "" {
+			files = append(files, [2]string{"uploads/" + photo, filepath.Join(s.dir, "uploads", photo)})
+		}
+		if video != "" {
+			files = append(files, [2]string{"videos/" + video, filepath.Join(s.videoDir, video)})
+		}
 	}
 	err = rows.Err()
 	rows.Close()
@@ -73,7 +78,7 @@ func (s *Store) Backup(ctx context.Context, destination string) error {
 		return err
 	}
 	for _, file := range files {
-		if err = add("uploads/"+file, filepath.Join(s.dir, "uploads", file)); err != nil {
+		if err = add(file[0], file[1]); err != nil {
 			z.Close()
 			return err
 		}

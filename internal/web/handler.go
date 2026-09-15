@@ -72,7 +72,7 @@ func Handler(a *auth.Auth, version string, stores ...*content.Store) http.Handle
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' blob: https://i.ytimg.com; frame-src https://accounts.google.com https://www.youtube-nocookie.com; connect-src 'self' https://accounts.google.com; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; media-src 'self' blob:; img-src 'self' blob: https://i.ytimg.com; frame-src https://accounts.google.com https://www.youtube-nocookie.com; connect-src 'self' https://accounts.google.com; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 		mux.ServeHTTP(w, r)
 	})
 }

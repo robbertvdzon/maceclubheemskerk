@@ -15,6 +15,7 @@ LABEL org.opencontainers.image.source="https://github.com/robbertvdzon/maceclubh
 COPY --from=toolchain /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/server /server
 COPY --from=toolchain --chown=10001:0 /runtime-data /data
+COPY --from=toolchain --chown=10001:0 /runtime-data /videos
 USER 10001:0
 EXPOSE 8080
 ENTRYPOINT ["/server"]

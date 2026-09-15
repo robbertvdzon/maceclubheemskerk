@@ -19,3 +19,5 @@
 - SQLite staat standaard in `/data/maceclub.sqlite`, foto’s in `/data/uploads`. Bewaar `/data/sessions.json` bij wijzigingen zodat bestaande logins geldig blijven.
 - Het goedgekeurde ontwerp staat in `design/`; de echte website staat in `internal/web/static`. Voorbeeldcontent en gesimuleerde login mogen niet naar de live frontend worden gekopieerd.
 - Uploads zijn begrensd, worden als afbeelding gedecodeerd en opnieuw gecodeerd. Bewaar willekeurige bestandsnamen. Tijdens een open formulier of videospeler geen automatische paginareload.
+
+- Eigen video’s: MP4/H.264 maximaal 90 MB, streaming upload naar aparte `VIDEO_DIR` PVC; geen hele video in RAM. Preserveer byte ranges en schema-2-migratie. Foto-normalisatie geldt alleen voor foto’s.

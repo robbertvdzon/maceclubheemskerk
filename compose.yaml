@@ -8,10 +8,12 @@ services:
     environment:
       SESSION_FILE: /data/sessions.json
       SQLITE_FILE: /data/maceclub.sqlite
+      VIDEO_DIR: /videos
       APP_ORIGINS: http://localhost:18080,http://127.0.0.1:18080
       COOKIE_SECURE: "false"
     volumes:
       - sessions:/data
+      - videos:/videos
     ports:
       - "127.0.0.1:18080:8080"
     read_only: true
@@ -30,5 +32,6 @@ services:
     command: [go, vet, ./...]
 volumes:
   sessions:
+  videos:
   go-cache:
   go-modules:

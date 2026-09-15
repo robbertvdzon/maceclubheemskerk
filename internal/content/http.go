@@ -51,6 +51,7 @@ func (s *Store) Register(mux *http.ServeMux, a *auth.Auth) {
 		s.create(w, r, u)
 	}))
 	mux.HandleFunc("GET /media/{file}", s.photo)
+	s.registerVideos(mux, a)
 }
 func (s *Store) create(w http.ResponseWriter, r *http.Request, u auth.User) {
 	// Bound decoded-image memory and concurrent uploads before reading the request.

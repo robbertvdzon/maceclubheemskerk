@@ -25,6 +25,9 @@ spec:
         - name: sessions
           persistentVolumeClaim:
             claimName: maceclubheemskerk-sessions-local
+        - name: videos
+          persistentVolumeClaim:
+            claimName: maceclubheemskerk-videos
       containers:
         - name: web
           image: ghcr.io/robbertvdzon/maceclubheemskerk:bootstrap
@@ -37,9 +40,13 @@ spec:
               value: /data/sessions.json
             - name: SQLITE_FILE
               value: /data/maceclub.sqlite
+            - name: VIDEO_DIR
+              value: /videos
           volumeMounts:
             - name: sessions
               mountPath: /data
+            - name: videos
+              mountPath: /videos
           ports:
             - name: http
               containerPort: 8080
@@ -80,6 +87,8 @@ spec:
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
+  annotations:
+    haproxy.router.openshift.io/timeout: 10m
   name: maceclubheemskerk
 spec:
   host: maceclubheemskerk.eu
@@ -95,6 +104,8 @@ spec:
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
+  annotations:
+    haproxy.router.openshift.io/timeout: 10m
   name: maceclubheemskerk-www
 spec:
   host: www.maceclubheemskerk.eu

@@ -28,18 +28,26 @@ type Item struct {
 	YouTube     string `json:"youtube,omitempty"`
 	Photo       string `json:"photo,omitempty"`
 	CreatedAt   string `json:"createdAt"`
+	Video       string `json:"video,omitempty"`
+	videoFile   string
 }
 type Library struct {
 	Items    []Item `json:"items"`
 	Revision int64  `json:"revision"`
 }
 type Store struct {
-	db     *sql.DB
-	dir    string
-	photos chan struct{}
+	db       *sql.DB
+	dir      string
+	photos   chan struct{}
+	videos   chan struct{}
+	videoDir string
 }
 
 func Open(path string) (*Store, error) {
+	return OpenWithVideoDir(path, filepath.Join(filepath.Dir(path), "videos"))
+}
+
+func OpenWithVideoDir(path, videoDir string) (*Store, error) {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
@@ -59,35 +67,18 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db: db, dir: dir, photos: make(chan struct{}, 1)}
-	var schema int
-	if err = db.QueryRow("PRAGMA user_version").Scan(&schema); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if schema > 1 {
-		db.Close()
-		return nil, errors.New("database schema is newer than this application")
-	}
-	// An idempotent first migration; subsequent schema changes require explicit versions.
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS media (
- id INTEGER PRIMARY KEY AUTOINCREMENT,
- section TEXT NOT NULL CHECK(section IN ('exercise','training')),
- kind TEXT NOT NULL CHECK(kind IN ('video','photo')),
- title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', category TEXT NOT NULL DEFAULT '',
- youtube_id TEXT NOT NULL DEFAULT '', photo_file TEXT NOT NULL DEFAULT '',
- created_by TEXT NOT NULL, created_at TEXT NOT NULL,
- CHECK((kind='video' AND length(youtube_id)=11 AND photo_file='') OR (kind='photo' AND youtube_id='' AND photo_file<>'')),
- CHECK(section<>'exercise' OR kind='video')
- );
- CREATE TABLE IF NOT EXISTS content_state (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL);
- INSERT OR IGNORE INTO content_state VALUES(1,0);
- PRAGMA user_version=1;`)
+	s := &Store{db: db, dir: dir, photos: make(chan struct{}, 1), videos: make(chan struct{}, 1), videoDir: videoDir}
+
+	err = migrate(db)
 	if err != nil {
 		db.Close()
 		return nil, err
 	}
 	if err = os.Chmod(absolute, 0600); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err = os.MkdirAll(s.videoDir, 0700); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -109,19 +100,22 @@ func (s *Store) List(ctx context.Context) (Library, error) {
 	if err = tx.QueryRowContext(ctx, "SELECT revision FROM content_state WHERE id=1").Scan(&out.Revision); err != nil {
 		return out, err
 	}
-	rows, err := tx.QueryContext(ctx, "SELECT id,section,kind,title,description,category,youtube_id,photo_file,created_at FROM media ORDER BY id DESC")
+	rows, err := tx.QueryContext(ctx, "SELECT id,section,kind,title,description,category,youtube_id,photo_file,created_at,video_file FROM media ORDER BY id DESC")
 	if err != nil {
 		return out, err
 	}
 	for rows.Next() {
 		var i Item
 		var file string
-		if err = rows.Scan(&i.ID, &i.Section, &i.Type, &i.Title, &i.Description, &i.Category, &i.YouTube, &file, &i.CreatedAt); err != nil {
+		if err = rows.Scan(&i.ID, &i.Section, &i.Type, &i.Title, &i.Description, &i.Category, &i.YouTube, &file, &i.CreatedAt, &i.videoFile); err != nil {
 			rows.Close()
 			return out, err
 		}
 		if file != "" {
 			i.Photo = "/media/" + file
+		}
+		if i.videoFile != "" {
+			i.Video = "/videos/" + i.videoFile
 		}
 		out.Items = append(out.Items, i)
 	}
@@ -173,7 +167,7 @@ func Validate(i *Item) error {
 	}
 	if i.Section == "exercise" {
 		if i.Type != "video" {
-			return errors.New("Voeg een oefening toe als YouTube-video.")
+			return errors.New("Voeg een oefening toe als video.")
 		}
 		if i.Category != "Basis" && i.Category != "Techniek" && i.Category != "Flow" {
 			return errors.New("Kies een geldige categorie.")
@@ -181,8 +175,8 @@ func Validate(i *Item) error {
 	} else {
 		i.Category = ""
 	}
-	if i.Type == "video" && !youtubePattern.MatchString(i.YouTube) {
-		return errors.New("Ongeldige YouTube-video.")
+	if i.Type == "video" && !youtubePattern.MatchString(i.YouTube) && !videoPattern.MatchString(i.videoFile) {
+		return errors.New("Ongeldige video.")
 	}
 	return nil
 }
@@ -209,7 +203,7 @@ func (s *Store) Create(ctx context.Context, i Item, author, file string) (Item, 
 		return i, errors.New("De bibliotheek is vol.")
 	}
 	i.CreatedAt = time.Now().UTC().Format(time.RFC3339)
-	res, err := tx.ExecContext(ctx, `INSERT INTO media(section,kind,title,description,category,youtube_id,photo_file,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)`, i.Section, i.Type, i.Title, i.Description, i.Category, i.YouTube, file, author, i.CreatedAt)
+	res, err := tx.ExecContext(ctx, `INSERT INTO media(section,kind,title,description,category,youtube_id,photo_file,created_by,created_at,video_file) VALUES(?,?,?,?,?,?,?,?,?,?)`, i.Section, i.Type, i.Title, i.Description, i.Category, i.YouTube, file, author, i.CreatedAt, i.videoFile)
 	if err != nil {
 		return i, err
 	}
@@ -225,6 +219,9 @@ func (s *Store) Create(ctx context.Context, i Item, author, file string) (Item, 
 	}
 	if file != "" {
 		i.Photo = "/media/" + file
+	}
+	if i.videoFile != "" {
+		i.Video = "/videos/" + i.videoFile
 	}
 	return i, nil
 }

@@ -10,3 +10,5 @@
 body{padding-bottom:0}.toast{bottom:24px}#google-button{min-height:44px;margin:24px 0}#login-status,#account-status{color:#944323}#media-stage iframe{width:100%;height:100%;position:absolute;inset:0;border:0}button:disabled{opacity:.6;cursor:wait;transform:none}.media-dialog{overflow-y:auto}#library-status:empty{display:none}
 /* YouTube requires a player viewport of at least 200 by 200 pixels. */
 #media-stage:has(iframe){min-height:200px}
+
+.uploaded-video{background:radial-gradient(ellipse at top left,#52573a,#23261f);position:relative}.uploaded-video>span:first-child{position:absolute;bottom:18px;left:18px;font-size:11px;letter-spacing:.12em;color:#dedaca}#video-preview{width:100%;max-height:260px;margin-top:12px;background:#151713}#media-stage video{width:100%;height:100%;max-height:70vh;object-fit:contain;background:#111}#upload-progress{width:100%;height:12px;accent-color:var(--orange,#d8794a)}#upload-status{padding:12px 0}#upload-message{font-size:14px}#cancel-upload{margin:0 0 12px}

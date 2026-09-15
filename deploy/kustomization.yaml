@@ -4,6 +4,7 @@ namespace: maceclubheemskerk
 resources:
 - app.yaml
 - sessions-pvc.yaml
+- videos-pvc.yaml
 - route-vdzonsoftware.yaml
 - secrets
 images:

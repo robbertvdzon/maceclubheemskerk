@@ -162,22 +162,25 @@ De sessiecookie en de PVC blijven bestaan bij herladen en deployen. Een tab die 
 - `GET /api/media`: openbare bibliotheek en revisie; Google-subjecten en e-mailadressen van auteurs worden niet teruggegeven.
 - `POST /api/media`: alleen een geldige sessie, toegestane Origin én een account in `MEMBER_EMAILS`.
 - Video: JSON met `section` (`exercise`/`training`), `title`, `description`, `category` (`Basis`, `Techniek`, `Flow`, alleen voor oefeningen) en `url`. Alleen herkende YouTube-links worden opgeslagen als video-ID; de server haalt geen willekeurige URL op.
+- Eigen video: `POST /api/videos`, multipart met `section`, `title`, `description`, `category` en bestand `video`. Dezelfde sessie-, Origin- en ledencontrole. Maximaal 90.000.000 bytes; MP4 met H.264 en eventueel AAC-geluid. Geen automatische conversie van MOV/HEVC. De Go-backend inspecteert begrensde MP4-metadata en streamt naar een tijdelijk bestand; pas na validatie verschijnt het in de bibliotheek. De browser toont voortgang en kan annuleren. Bestanden zijn openbaar via `/videos/{willekeurige-naam}.mp4`, met ondersteuning voor byte ranges en doorspoelen.
 - Foto: multipart met `section=training`, `title`, `description`, bestand `photo`. Maximaal 10 MB en 16 megapixels; JPG, PNG of WebP. De backend controleert de echte inhoud, corrigeert JPEG-cameraoriëntatie, verkleint tot maximaal 2048 pixels en schrijft een nieuwe JPEG zonder originele metadata.
 - YouTube-thumbnails komen van YouTube. De speler wordt pas na aanklikken via `youtube-nocookie.com` geladen. Geüploade foto’s zijn openbaar zichtbaar, zoals de rest van de homepage.
-- Database en uploads delen de bestaande PVC `maceclubheemskerk-sessions-local`. Eén replica, `Recreate`, SQLite WAL en transacties. Geen voorbeeldcontent wordt ingeladen. Er is een bovengrens van 10.000 items; uploads worden één voor één verwerkt om geheugenverbruik te begrenzen.
+- Database en foto’s delen de bestaande PVC `maceclubheemskerk-sessions-local`. Eén replica, `Recreate`, SQLite WAL en transacties. Geen voorbeeldcontent wordt ingeladen. Er is een bovengrens van 10.000 items; uploads worden één voor één verwerkt om geheugenverbruik te begrenzen.
+- Video’s staan op een afzonderlijke 10 GiB PVC `maceclubheemskerk-videos`, gemount op `/videos` via `VIDEO_DIR`. Lokaal gebruikt Compose een apart volume. Het appbudget is 9 GiB, met een extra controle op vrije schijfruimte. De `local-path` storageclass reserveert niet fysiek 10 GiB op de node; bewaak ook de nodecapaciteit. Eén gelijktijdige videoupload, maximaal tien minuten; de bestaande database, foto’s en sessies behouden hun volume.
+- Schema 2 migreert automatisch en transactioneel vanuit schema 1 met behoud van bestaande inhoud, IDs en revisie. Terugrollen naar een oude binary vereist herstel van een vooraf gemaakte schema-1-back-up; oudere binaries kennen het videoveld niet.
 - Momenteel kan de club content toevoegen en bekijken. Bewerken/verwijderen is nog geen gebruikersfunctie.
 
 ### Consistente back-up en herstel
 
-De Go-binary heeft een back-upcommando. Het maakt via `VACUUM INTO` een consistente databasekopie plus alle daarin genoemde foto’s in één zipbestand. Het overschrijft geen bestaande back-up. Lokaal:
+De Go-binary heeft een back-upcommando. Het maakt via `VACUUM INTO` een consistente databasekopie plus alle daarin genoemde foto’s en video’s in één zipbestand. Het overschrijft geen bestaande back-up. Lokaal:
 
 ```sh
-docker compose exec web /server backup /data/club-backup.zip
-docker compose cp web:/data/club-backup.zip ./club-backup.zip
+docker compose exec web /server backup /videos/club-backup.zip
+docker compose cp web:/videos/club-backup.zip ./club-backup.zip
 ```
 
-In OpenShift kan hetzelfde commando via `oc exec` worden gestart. De runtime heeft geen shell of `tar`; download de zip bijvoorbeeld met een tijdelijke, passende volume-helper, niet met `oc cp` dat `tar` vereist. Back-ups zijn handmatig; er is geen externe back-upbestemming geconfigureerd. Een back-up op dezelfde PVC beschermt niet tegen verlies van de node.
+In OpenShift kan hetzelfde commando via `oc exec` worden gestart. De runtime heeft geen shell of `tar`; download de zip bijvoorbeeld met een tijdelijke, passende volume-helper, niet met `oc cp` dat `tar` vereist. Back-ups zijn handmatig; er is geen externe back-upbestemming geconfigureerd. Een back-up op dezelfde PVC beschermt niet tegen verlies van de node. Zorg vóór het back-uppen voor genoeg extra ruimte voor de hele bibliotheek; kopieer de zip daarna naar externe opslag.
 
-Herstellen: stop de applicatie, bewaar de huidige `/data` apart, pak de zip uit naar een lege datamap (database en `uploads/` samen), herstel passende eigenaar/rechten en start de app. Leg geen oude `-wal`/`-shm` naast een herstelde database. Sessies worden niet in de contentback-up opgenomen; behoud het bestaande `sessions.json` apart voor blijvende logins. Kopieer nooit alleen een actief SQLite-hoofdbestand voor een back-up.
+Herstellen: stop de applicatie, bewaar de huidige `/data` en `/videos` apart, pak de zip uit naar een lege datamap (database en `uploads/` samen), zet de uitgepakte `videos/`-inhoud op de aparte `VIDEO_DIR`-mount, herstel passende eigenaar/rechten en start de app. Leg geen oude `-wal`/`-shm` naast een herstelde database. Sessies worden niet in de contentback-up opgenomen; behoud het bestaande `sessions.json` apart voor blijvende logins. Kopieer nooit alleen een actief SQLite-hoofdbestand voor een back-up.
 
 Tests controleren SQLite-heropening, backup/herstel met foto’s, Origin en ledenrechten, uploadvalidatie, normalisatie en bescherming tegen toegang tot andere bestanden. Echte Google-productielogins worden niet automatisch getest.
