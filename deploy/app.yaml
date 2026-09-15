@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maceclubheemskerk
+  annotations:
+    secret.reloader.stakater.com/reload: maceclubheemskerk-secrets
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: maceclubheemskerk
+  template:
+    metadata:
+      labels:
+        app: maceclubheemskerk
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web
+          image: ghcr.io/robbertvdzon/maceclubheemskerk:bootstrap
+          envFrom:
+            - secretRef:
+                name: maceclubheemskerk-secrets
+                optional: true
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 250m
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: maceclubheemskerk
+spec:
+  selector:
+    app: maceclubheemskerk
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: maceclubheemskerk
+spec:
+  host: maceclubheemskerk.eu
+  to:
+    kind: Service
+    name: maceclubheemskerk
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Allow
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: maceclubheemskerk-www
+spec:
+  host: www.maceclubheemskerk.eu
+  to:
+    kind: Service
+    name: maceclubheemskerk
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Allow

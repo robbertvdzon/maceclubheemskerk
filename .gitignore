@@ -1,0 +1,9 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+/bin/
+secrets.env
+secrets.*.env
+!secrets.example.env
+__pycache__/

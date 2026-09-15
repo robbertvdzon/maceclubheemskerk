@@ -1,0 +1,22 @@
+services:
+  web:
+    build: .
+    ports:
+      - "127.0.0.1:18080:8080"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+  tools:
+    profiles: [tools]
+    build:
+      context: .
+      target: toolchain
+    volumes:
+      - .:/src
+      - go-cache:/root/.cache/go-build
+      - go-modules:/go/pkg/mod
+    command: [go, vet, ./...]
+volumes:
+  go-cache:
+  go-modules:

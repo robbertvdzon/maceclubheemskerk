@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+README.md
+AGENTS.md
+deploy
+**/*secrets*.env
+**/*secrets*.env.*
+.github
+tests
