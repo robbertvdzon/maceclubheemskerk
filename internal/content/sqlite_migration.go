@@ -15,7 +15,6 @@ func MigrateSQLite(ctx context.Context, sourceFile, databaseURL string) (int, in
 	u := url.URL{Scheme: "file", Path: sourceFile}
 	q := u.Query()
 	q.Set("mode", "ro")
-	q.Set("immutable", "1")
 	u.RawQuery = q.Encode()
 	source, err := sql.Open("sqlite", u.String())
 	if err != nil {
