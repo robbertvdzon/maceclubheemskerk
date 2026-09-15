@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
 
@@ -39,6 +40,7 @@ type Library struct {
 type Store struct {
 	db            *sql.DB
 	dir           string
+	dialect       string
 	photos        chan struct{}
 	videos        chan struct{}
 	videoDir      string
@@ -52,36 +54,62 @@ func Open(path string) (*Store, error) {
 	return OpenWithVideoDir(path, filepath.Join(filepath.Dir(path), "videos"))
 }
 
-func OpenWithVideoDir(path, videoDir string) (*Store, error) {
-	absolute, err := filepath.Abs(path)
-	if err != nil {
-		return nil, err
+// OpenWithVideoDir opens PostgreSQL when DATABASE_URL is a postgres URL. SQLite is
+// retained only for local tools and for reading the historical migration source.
+func OpenWithVideoDir(databaseURL, videoDir string) (*Store, error) {
+	dialect := "sqlite"
+	dir := filepath.Dir(databaseURL)
+	if strings.HasPrefix(databaseURL, "postgres://") || strings.HasPrefix(databaseURL, "postgresql://") {
+		dialect = "postgres"
+		dir = "/data"
+	} else {
+		absolute, err := filepath.Abs(databaseURL)
+		if err != nil {
+			return nil, err
+		}
+		databaseURL = absolute
+		dir = filepath.Dir(absolute)
+		if err = os.MkdirAll(filepath.Join(dir, "uploads"), 0700); err != nil {
+			return nil, err
+		}
 	}
-	dir := filepath.Dir(absolute)
-	if err = os.MkdirAll(filepath.Join(dir, "uploads"), 0700); err != nil {
-		return nil, err
-	}
-	u := url.URL{Scheme: "file", Path: absolute}
-	q := u.Query()
-	for _, p := range []string{"busy_timeout(5000)", "journal_mode(WAL)", "synchronous(FULL)", "foreign_keys(ON)", "temp_store(MEMORY)"} {
-		q.Add("_pragma", p)
-	}
-	u.RawQuery = q.Encode()
-	db, err := sql.Open("sqlite", u.String())
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	s := &Store{db: db, dir: dir, photos: make(chan struct{}, 1), videos: make(chan struct{}, 1), videoDir: videoDir, convertVideo: transcodeVideo}
 
-	err = migrate(db)
+	var db *sql.DB
+	var err error
+	if dialect == "postgres" {
+		db, err = sql.Open("pgx", databaseURL)
+	} else {
+		u := url.URL{Scheme: "file", Path: databaseURL}
+		q := u.Query()
+		for _, p := range []string{"busy_timeout(5000)", "journal_mode(WAL)", "synchronous(FULL)", "foreign_keys(ON)", "temp_store(MEMORY)"} {
+			q.Add("_pragma", p)
+		}
+		u.RawQuery = q.Encode()
+		db, err = sql.Open("sqlite", u.String())
+	}
 	if err != nil {
+		return nil, err
+	}
+	if dialect == "sqlite" {
+		db.SetMaxOpenConns(1)
+	} else {
+		db.SetMaxOpenConns(5)
+		db.SetMaxIdleConns(2)
+	}
+	if err = db.Ping(); err != nil {
 		db.Close()
 		return nil, err
 	}
-	if err = os.Chmod(absolute, 0600); err != nil {
+	s := &Store{db: db, dir: dir, dialect: dialect, photos: make(chan struct{}, 1), videos: make(chan struct{}, 1), videoDir: videoDir, convertVideo: transcodeVideo}
+	if err = migrate(db, dialect); err != nil {
 		db.Close()
 		return nil, err
+	}
+	if dialect == "sqlite" {
+		if err = os.Chmod(databaseURL, 0600); err != nil {
+			db.Close()
+			return nil, err
+		}
 	}
 	if err = os.MkdirAll(s.videoDir, 0700); err != nil {
 		db.Close()
@@ -89,6 +117,24 @@ func OpenWithVideoDir(path, videoDir string) (*Store, error) {
 	}
 	return s, nil
 }
+
+func (s *Store) bind(query string) string {
+	if s.dialect != "postgres" {
+		return query
+	}
+	var b strings.Builder
+	n := 1
+	for _, ch := range query {
+		if ch == '?' {
+			fmt.Fprintf(&b, "$%d", n)
+			n++
+		} else {
+			b.WriteRune(ch)
+		}
+	}
+	return b.String()
+}
+
 func (s *Store) Close() error {
 	s.uploadMu.Lock()
 	for _, upload := range s.chunkUploads {
@@ -225,14 +271,19 @@ func (s *Store) Create(ctx context.Context, i Item, author, file string) (Item, 
 		return i, errors.New("De bibliotheek is vol.")
 	}
 	i.CreatedAt = time.Now().UTC().Format(time.RFC3339)
-	res, err := tx.ExecContext(ctx, `INSERT INTO media(section,kind,title,description,category,youtube_id,photo_file,created_by,created_at,video_file) VALUES(?,?,?,?,?,?,?,?,?,?)`, i.Section, i.Type, i.Title, i.Description, i.Category, i.YouTube, file, author, i.CreatedAt, i.videoFile)
+	if s.dialect == "postgres" {
+		err = tx.QueryRowContext(ctx, s.bind(`INSERT INTO media(section,kind,title,description,category,youtube_id,photo_file,created_by,created_at,video_file) VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id`), i.Section, i.Type, i.Title, i.Description, i.Category, i.YouTube, file, author, i.CreatedAt, i.videoFile).Scan(&i.ID)
+	} else {
+		res, execErr := tx.ExecContext(ctx, `INSERT INTO media(section,kind,title,description,category,youtube_id,photo_file,created_by,created_at,video_file) VALUES(?,?,?,?,?,?,?,?,?,?)`, i.Section, i.Type, i.Title, i.Description, i.Category, i.YouTube, file, author, i.CreatedAt, i.videoFile)
+		if execErr == nil {
+			i.ID, execErr = res.LastInsertId()
+		}
+		err = execErr
+	}
 	if err != nil {
 		return i, err
 	}
-	i.ID, err = res.LastInsertId()
-	if err != nil {
-		return i, err
-	}
+
 	if _, err = tx.ExecContext(ctx, "UPDATE content_state SET revision=revision+1 WHERE id=1"); err != nil {
 		return i, err
 	}

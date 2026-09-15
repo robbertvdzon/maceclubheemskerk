@@ -15,6 +15,7 @@ spec:
     metadata:
       labels:
         app: maceclubheemskerk
+        postgres.vdzonsoftware.nl/client: 'true'
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -22,6 +23,9 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       volumes:
+        - name: postgres-ca
+          configMap:
+            name: postgres-production-ca
         - name: sessions
           persistentVolumeClaim:
             claimName: maceclubheemskerk-sessions-local
@@ -38,11 +42,12 @@ spec:
           env:
             - name: SESSION_FILE
               value: /data/sessions.json
-            - name: SQLITE_FILE
-              value: /data/maceclub.sqlite
             - name: VIDEO_DIR
               value: /videos
           volumeMounts:
+            - name: postgres-ca
+              mountPath: /var/run/postgres-ca
+              readOnly: true
             - name: sessions
               mountPath: /data
             - name: videos

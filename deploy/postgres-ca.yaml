@@ -1,0 +1,32 @@
+apiVersion: v1
+data:
+  ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIESTCCArGgAwIBAgIJANcFYEA476JSMA0GCSqGSIb3DQEBCwUAMCsxKTAnBgNV
+    BAMMIHBvc3RncmVzLnBvc3RncmVzLXByb2R1Y3Rpb24uc3ZjMB4XDTI2MDkxNTE5
+    MDAxOVoXDTM2MDkxMjE5MDAxOVowKzEpMCcGA1UEAwwgcG9zdGdyZXMucG9zdGdy
+    ZXMtcHJvZHVjdGlvbi5zdmMwggGiMA0GCSqGSIb3DQEBAQUAA4IBjwAwggGKAoIB
+    gQCVGzQ5iSvsKvQ/PXAx42qjWv9MmvR9e24GHdcIF7mD9qepui1zQqmf4bRWFYkB
+    QNd/yPTY8mTz269wyLBzXloBEzffLIyxW5/RiaG58TOPVJ1ynna37nEZlBKy/FcI
+    2eKsHkaeHW2/42ATV9h9hbRzsTUqgYkqjm9V0CjovRbdsxmZGQ7Risu5nFIXpM3I
+    KVcExZng2wre6hh00nCCyPSlTIcceaSCIdKr8KYtsf3AF2nma2Y7P604sHLrhsZW
+    XvvZZn4UOjug05Dy+RB8DCHbaioKzXc19xCro4dfBhtskWByCcS8AaDtw6sRHDRE
+    6kTnDvPKMkeHOKSHnRRPz3VpvPaUWuihZVWUalQiY7z0XliTPUHCezYuyfmqpity
+    j5ObD5L3rDSABRzSB2lR3cDlfcBQOA1mTWDGBsJB4uxRA4e3NceCBqmUauJS7HMq
+    s3hCuuSpK+Ks9Y7X18n8oow6FNx9eTXt8hkxub+a4k7YgHs/cytS6utTcNULMrol
+    GI0CAwEAAaNwMG4wWwYDVR0RBFQwUoIgcG9zdGdyZXMucG9zdGdyZXMtcHJvZHVj
+    dGlvbi5zdmOCLnBvc3RncmVzLnBvc3RncmVzLXByb2R1Y3Rpb24uc3ZjLmNsdXN0
+    ZXIubG9jYWwwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAYEAYQVc
+    Wb5XlH1v033YSe3J2T3nCWk27vSfxFiE+7WVJWLJmev7sDE6jI7jvEry+ll7Q3zL
+    4xoMxQHC3nKxYYk3BwvKMgXpRvjPy7EokmDcLtUrfCxzHPP970tlmFao978eaV/3
+    OY/sdTAnyh0x/RtFw4AaD1Wd81eL/x9Ing/mj4opWAxYKX1PIbDQkYSD2NfgIxx5
+    u854AbT83RoouvkMDZuW3p2G9jYj9FdCRLZmgqzPQ/krf1sTV62iFOpdDpvHVMKy
+    6i3c03CdQ4oPen05SLCO2tw+Sqy9HFRzKR7z8H8cX/Ol1/ilNxdj7i3QMtVeKn1b
+    b0weORk+mF4sIrc6VFZ5Gh1iw581txbIu431wB8Tfn6ilahfJuJobkIUYhm9/fHg
+    Lx2WR0bMw/CfKkWlOOSCD0KxCQwX4XrTXR26WN2il0PfUDyQxSyJLpqkydT2Gja4
+    xMwb2xMRIUlVSvM28g/9uD5Uvr+/ZCMyxfGhCGWgtwW13dsd7QF7wbatekIo
+    -----END CERTIFICATE-----
+kind: ConfigMap
+metadata:
+  name: postgres-production-ca
+  namespace: maceclubheemskerk

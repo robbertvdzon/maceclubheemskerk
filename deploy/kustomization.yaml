@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: maceclubheemskerk
 resources:
 - app.yaml
+- postgres-ca.yaml
 - sessions-pvc.yaml
 - videos-pvc.yaml
 - route-vdzonsoftware.yaml

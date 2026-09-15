@@ -226,7 +226,7 @@ func (s *Store) photo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var exists int
-	if err := s.db.QueryRowContext(r.Context(), "SELECT 1 FROM media WHERE photo_file=?", name).Scan(&exists); err != nil {
+	if err := s.db.QueryRowContext(r.Context(), s.bind("SELECT 1 FROM media WHERE photo_file=?"), name).Scan(&exists); err != nil {
 		http.NotFound(w, r)
 		return
 	}
