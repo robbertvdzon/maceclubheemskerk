@@ -24,7 +24,7 @@ spec:
       volumes:
         - name: sessions
           persistentVolumeClaim:
-            claimName: maceclubheemskerk-sessions
+            claimName: maceclubheemskerk-sessions-local
       containers:
         - name: web
           image: ghcr.io/robbertvdzon/maceclubheemskerk:bootstrap

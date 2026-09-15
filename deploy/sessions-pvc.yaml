@@ -1,9 +1,12 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: maceclubheemskerk-sessions
+  name: maceclubheemskerk-sessions-local
   annotations:
     argocd.argoproj.io/sync-options: Prune=false
+    # Kubernetes local volumes support SELinux relabelling and fsGroup;
+    # the provisioner's default hostPath volumes do not.
+    volumeType: local
 spec:
   accessModes: [ReadWriteOnce]
   resources:
