@@ -4,12 +4,11 @@
   const loginDialog = document.querySelector('#login-dialog');
   const accountDialog = document.querySelector('#account-dialog');
   const status = document.querySelector('#login-status');
-  const version = document.querySelector('meta[name="app-version"]').content;
+
   let user = null;
   let googleScript;
   let signingIn = false;
-  let checkingVersion = false;
-  let reloading = false;
+
 
   async function api(path, options = {}) {
     const response = await fetch(path, { ...options, credentials: 'same-origin', cache: 'no-store' });
@@ -17,13 +16,18 @@
     if (!response.ok) throw new Error(body.error || 'Dit is tijdelijk niet beschikbaar. Probeer opnieuw.');
     return body;
   }
-  function setUser(value) {
+  function setUser(value, canEdit = false) {
+    window.MCH.user = value;
+    window.MCH.canEdit = !!value && canEdit;
     user = value;
-    accountButton.textContent = user ? 'Mijn account' : 'Inloggen';
+    accountButton.querySelector('span').textContent = user ? (user.name?.split(' ')[0] || 'Mijn account') : 'Inloggen';
+    document.querySelectorAll('.member-only').forEach(el => el.hidden = !window.MCH.canEdit);
+    document.querySelector('#account-permission').textContent = window.MCH.canEdit ? 'Je kunt oefeningen en trainingsbeelden toevoegen.' : 'Dit account heeft geen rechten om content toe te voegen.';
+    window.dispatchEvent(new CustomEvent('club-auth'));
     if (!user && accountDialog.open) accountDialog.close();
   }
   async function refreshSession() {
-    try { setUser((await api('/api/auth/me')).user); }
+    try { const result = await api('/api/auth/me'); setUser(result.user, result.canEdit); }
     catch { /* A temporary outage must not turn a signed-in visitor into a logged-out one. */ }
   }
   function loadGoogle() {
@@ -53,21 +57,21 @@
         auto_select: false,
         callback: async ({ credential }) => {
           if (signingIn) return;
-          signingIn = true;
+          signingIn = true; window.MCH.signingIn = true;
           status.textContent = 'Bezig met inloggen…';
           try {
             const result = await api('/api/auth/google', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ credential }),
             });
-            setUser(result.user);
+            setUser(result.user, result.canEdit);
             loginDialog.close();
             await showAccount();
           } catch (error) {
             // A nonce is single-use. Obtain a new one before offering another attempt.
             await showGoogleButton();
             status.textContent = error.message;
-          } finally { signingIn = false; }
+          } finally { signingIn = false; window.MCH.signingIn = false; }
         },
       });
       window.google.accounts.id.renderButton(document.querySelector('#google-button'), {
@@ -79,7 +83,7 @@
   async function showAccount() {
     try {
       const result = await api('/api/account');
-      setUser(result.user);
+      setUser(result.user, result.canEdit);
       document.querySelector('#account-name').textContent = user.name || 'Google-account';
       document.querySelector('#account-email').textContent = user.email;
       document.querySelector('#account-status').textContent = '';
@@ -106,26 +110,11 @@
     } catch (error) { document.querySelector('#account-status').textContent = error.message; }
     finally { event.target.disabled = false; }
   });
-  async function checkVersion() {
-    if (document.hidden || checkingVersion || reloading || signingIn) return;
-    checkingVersion = true;
-    try {
-      const latest = await api('/api/version');
-      if (typeof latest.version === 'string' && /^[a-f0-9]{64}$/.test(latest.version) && latest.version !== version) {
-        reloading = true;
-        const next = new URL(location.href);
-        next.searchParams.set('v', latest.version);
-        location.replace(next.href);
-      }
-    } catch { /* Keep the working page during network outages and deployments. */ }
-    finally { checkingVersion = false; }
-  }
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) { checkVersion(); refreshSession(); }
-  });
-  window.addEventListener('pageshow', () => { checkVersion(); refreshSession(); });
-  window.addEventListener('online', () => { checkVersion(); refreshSession(); });
-  setInterval(checkVersion, 3000);
+  window.MCH = { api, user: null, canEdit: false, signingIn: false, refreshSession,
+    openLogin: async () => { loginDialog.showModal(); await showGoogleButton(); }, showAccount };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshSession(); });
+  window.addEventListener('pageshow', refreshSession);
+  window.addEventListener('online', refreshSession);
   setInterval(refreshSession, 60 * 60 * 1000);
   refreshSession();
 })();

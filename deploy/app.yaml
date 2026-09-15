@@ -35,6 +35,8 @@ spec:
           env:
             - name: SESSION_FILE
               value: /data/sessions.json
+            - name: SQLITE_FILE
+              value: /data/maceclub.sqlite
           volumeMounts:
             - name: sessions
               mountPath: /data
@@ -49,10 +51,10 @@ spec:
           resources:
             requests:
               cpu: 10m
-              memory: 16Mi
+              memory: 32Mi
             limits:
               cpu: 250m
-              memory: 64Mi
+              memory: 256Mi
           readinessProbe:
             httpGet:
               path: /healthz

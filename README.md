@@ -1,6 +1,6 @@
 # Mace Club Heemskerk
 
-Go-webserver met een tijdelijke Nederlandse startpagina. Geen database, JavaScript-build of lokale Go-installatie nodig. Docker compileert de Go-code; de runtime-image bevat de binary, CA-certificaten en een mountpunt voor sessieopslag.
+Go-website met Google-login, een SQLite-videobibliotheek en trainingsfoto’s. Geen JavaScript-build of lokale Go-installatie nodig. Docker compileert de Go-code; de runtime bevat de binary, CA-certificaten en persistente data onder `/data`.
 
 ## Lokaal starten
 
@@ -51,7 +51,7 @@ De smoketest gebruikt een eigen tijdelijke container met een willekeurige UID, a
 - `GET /healthz`: status voor OpenShift-probes.
 - `PORT`: luisterpoort, standaard `8080`.
 
-Later kan SQL vanuit Go via `database/sql` en een driver worden aangesloten. Voeg de opslaglaag toe wanneer de functionaliteit en databasekeuze bekend zijn. Voor login is er nu alleen een echt persistent sessiebestand op een PVC; er is nog geen SQL-database.
+`internal/content` gebruikt `database/sql` en de pure-Go `modernc.org/sqlite`-driver. `SQLITE_FILE` is standaard `/data/maceclub.sqlite`. Foto’s staan in de map `uploads` naast de database. De bestaande sessies blijven in `/data/sessions.json`; deze update maakt bestaande sessies niet ongeldig.
 
 ## Deployment naar OpenShift
 
@@ -89,7 +89,7 @@ Voeg voor `maceclubheemskerk.eu` én `www.maceclubheemskerk.eu` een hostname met
 
 Cloudflare verzorgt browser-TLS; de laatste verbinding binnen het cluster gebruikt HTTP. Daarom staat de OpenShift Route op `Allow`. Na activatie van HTTPS controleer je beide hostnamen. Er wordt geen extra tunnel aangemaakt.
 
-### Secrets voor de latere SQL-koppeling
+### Secrets en ledenrechten
 
 `secrets.example.env` is het lege voorbeeld in Git. De lokale `secrets.env` is aangemaakt met bestandsrechten `600` en wordt door Git én Docker genegeerd. Maak bij een nieuwe checkout zelf een kopie:
 
@@ -98,7 +98,7 @@ cp -n secrets.example.env secrets.env
 chmod 600 secrets.env
 ```
 
-De gereserveerde keys zijn `DATABASE_URL`, `DATABASE_USER` en `DATABASE_PASSWORD`. De databasekeuze en het URL-formaat volgen later. De Go-app gebruikt deze waarden nu nog niet; er wordt geen database of databasegebruiker aangemaakt. Lege waarden mogen blijven staan.
+SQLite heeft geen databasewachtwoord nodig. `DATABASE_URL`, `DATABASE_USER` en `DATABASE_PASSWORD` blijven ongebruikte reserveringen voor een eventuele externe database. `GOOGLE_CLIENT_ID` configureert login; `MEMBER_EMAILS` bevat de komma-gescheiden Google-adressen van leden die content mogen toevoegen. Leeg betekent dat niemand mag toevoegen. Voeg toekomstige leden handmatig aan deze lijst toe; er is geen openbare registratie.
 
 Zodra er echte waarden zijn ingevuld:
 
@@ -114,7 +114,7 @@ Het script gebruikt `python3`, `kubeseal` en het publieke clustercertificaat uit
 - Het script schrijft `deploy/secrets/sealed-secret.json` en registreert dit in de bijbehorende Kustomization. Commit deze versleutelde bestanden; nooit `secrets.env`.
 - De versleuteling is gebonden aan namespace `maceclubheemskerk` en Secret `maceclubheemskerk-secrets`; kopieer dit niet naar een andere omgeving.
 - Argo CD synchroniseert het SealedSecret; de bestaande controller maakt het Secret. De Deployment leest dit via een optionele `envFrom`-referentie. De bestaande Reloader zorgt voor herstart bij secretwijzigingen.
-- De lokale Compose-service leest `secrets.env` als ruwe waarden (geen shell- of dollar-expansie). De databasekeys worden pas gebruikt wanneer er een SQL-koppeling wordt gebouwd.
+- De lokale Compose-service leest `secrets.env` als ruwe waarden (geen shell- of dollar-expansie). De gereserveerde externe databasekeys worden niet gebruikt door SQLite.
 
 ### Terugrollen
 
@@ -122,7 +122,7 @@ Herstel de vorige werkende image-digest in `deploy/kustomization.yaml` en commit
 
 ## Google-login en ingelogd blijven
 
-De startpagina blijft openbaar. De knop **Inloggen** opent de officiële Google-inlogknop. Een ingelogde bezoeker ziet **Mijn account** en kan uitloggen. Concrete extra clubfuncties moeten nog worden bepaald; inloggen geeft geen beheerdersrechten.
+De startpagina blijft openbaar. De knop **Inloggen** opent de officiële Google-inlogknop. Een ingelogde bezoeker ziet **Mijn account** en kan uitloggen. Alleen accounts uit `MEMBER_EMAILS` zien de toevoegknoppen en krijgen server-side schrijfrechten. Andere ingelogde accounts kunnen de openbare website bekijken, maar niets toevoegen.
 
 De bestaande publieke Web OAuth-client-ID uit het project `tuinbewatering` (client `Robberts applicaties`) staat als `GOOGLE_CLIENT_ID` in het genegeerde `secrets.env` en in een SealedSecret. Er is geen Google client secret of Google refresh token nodig. Google geeft een kort geldig ID-token; de backend controleert de handtekening met de officiële Google Go-library en valideert audience, issuer, expiry, geverifieerde e-mail en eenmalige nonce. De gebruiker wordt geïdentificeerd met de stabiele Google `sub`.
 
@@ -153,6 +153,31 @@ Voor deze popup-login zijn geen redirect-URI's nodig. Als het Google-project nog
 
 Alle HTML, CSS, JavaScript en API-responses gebruiken `Cache-Control: no-store` en expliciete no-store-headers voor Cloudflare. De HTML verwijst naar CSS en JS met de versie in de URL. Er is geen service worker.
 
-De fingerprint in `/api/version` is de SHA-256 van de daadwerkelijk draaiende Go-binary; ook backendwijzigingen tellen mee. Een zichtbare pagina controleert om de drie seconden en bij terugkeer naar de tab. Bij een verschil wordt de pagina automatisch vervangen door de nieuwe versie met een cache-busting queryparameter. Tijdelijke netwerkfouten laten de bestaande pagina intact. Tijdens de login-uitwisseling wordt niet herladen.
+De fingerprint in `/api/version` is de SHA-256 van de daadwerkelijk draaiende Go-binary; ook backendwijzigingen tellen mee. Een zichtbare pagina controleert om de drie seconden en bij terugkeer naar de tab. Bij een verschil wordt de pagina automatisch vervangen door de nieuwe versie met een cache-busting queryparameter. Tijdelijke netwerkfouten laten de bestaande pagina intact. Tijdens de login-uitwisseling en zolang een dialoog (zoals het toevoegformulier of de videospeler) openstaat, wordt niet herladen. Een contentrevisie vernieuwt alleen de bibliotheek, zonder de pagina te herladen.
 
-De sessiecookie en de PVC blijven bestaan bij herladen en deployen. Een tab die nog de oude versie van vóór deze monitor bevat, moet één keer handmatig worden vernieuwd om de monitor te laden. Toekomstige formulieren met onopgeslagen invoer moeten vóór automatisch herladen expliciet worden beschermd.
+De sessiecookie en de PVC blijven bestaan bij herladen en deployen. Een tab die nog de oude versie van vóór deze monitor bevat, moet één keer handmatig worden vernieuwd om de monitor te laden. Het toevoegformulier houdt invoer vast bij validatiefouten en onderbrekingen; na een geslaagde opslag vernieuwt de bibliotheek direct.
+
+## Video’s, foto’s en persistente SQLite-opslag
+
+- `GET /api/media`: openbare bibliotheek en revisie; Google-subjecten en e-mailadressen van auteurs worden niet teruggegeven.
+- `POST /api/media`: alleen een geldige sessie, toegestane Origin én een account in `MEMBER_EMAILS`.
+- Video: JSON met `section` (`exercise`/`training`), `title`, `description`, `category` (`Basis`, `Techniek`, `Flow`, alleen voor oefeningen) en `url`. Alleen herkende YouTube-links worden opgeslagen als video-ID; de server haalt geen willekeurige URL op.
+- Foto: multipart met `section=training`, `title`, `description`, bestand `photo`. Maximaal 10 MB en 16 megapixels; JPG, PNG of WebP. De backend controleert de echte inhoud, corrigeert JPEG-cameraoriëntatie, verkleint tot maximaal 2048 pixels en schrijft een nieuwe JPEG zonder originele metadata.
+- YouTube-thumbnails komen van YouTube. De speler wordt pas na aanklikken via `youtube-nocookie.com` geladen. Geüploade foto’s zijn openbaar zichtbaar, zoals de rest van de homepage.
+- Database en uploads delen de bestaande PVC `maceclubheemskerk-sessions-local`. Eén replica, `Recreate`, SQLite WAL en transacties. Geen voorbeeldcontent wordt ingeladen. Er is een bovengrens van 10.000 items; uploads worden één voor één verwerkt om geheugenverbruik te begrenzen.
+- Momenteel kan de club content toevoegen en bekijken. Bewerken/verwijderen is nog geen gebruikersfunctie.
+
+### Consistente back-up en herstel
+
+De Go-binary heeft een back-upcommando. Het maakt via `VACUUM INTO` een consistente databasekopie plus alle daarin genoemde foto’s in één zipbestand. Het overschrijft geen bestaande back-up. Lokaal:
+
+```sh
+docker compose exec web /server backup /data/club-backup.zip
+docker compose cp web:/data/club-backup.zip ./club-backup.zip
+```
+
+In OpenShift kan hetzelfde commando via `oc exec` worden gestart. De runtime heeft geen shell of `tar`; download de zip bijvoorbeeld met een tijdelijke, passende volume-helper, niet met `oc cp` dat `tar` vereist. Back-ups zijn handmatig; er is geen externe back-upbestemming geconfigureerd. Een back-up op dezelfde PVC beschermt niet tegen verlies van de node.
+
+Herstellen: stop de applicatie, bewaar de huidige `/data` apart, pak de zip uit naar een lege datamap (database en `uploads/` samen), herstel passende eigenaar/rechten en start de app. Leg geen oude `-wal`/`-shm` naast een herstelde database. Sessies worden niet in de contentback-up opgenomen; behoud het bestaande `sessions.json` apart voor blijvende logins. Kopieer nooit alleen een actief SQLite-hoofdbestand voor een back-up.
+
+Tests controleren SQLite-heropening, backup/herstel met foto’s, Origin en ledenrechten, uploadvalidatie, normalisatie en bescherming tegen toegang tot andere bestanden. Echte Google-productielogins worden niet automatisch getest.

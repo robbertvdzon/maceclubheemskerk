@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/robbertvdzon/maceclubheemskerk/internal/auth"
+	"github.com/robbertvdzon/maceclubheemskerk/internal/content"
 	"io"
 	"log/slog"
 	"net/http"
@@ -26,12 +27,22 @@ func main() {
 }
 
 func run() error {
+	library, err := content.Open(env("SQLITE_FILE", "/data/maceclub.sqlite"))
+	if err != nil {
+		return fmt.Errorf("open content database: %w", err)
+	}
+	defer library.Close()
+	if len(os.Args) == 3 && os.Args[1] == "backup" {
+		return library.Backup(context.Background(), os.Args[2])
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 	cfg := auth.Config{
 		ClientID:      os.Getenv("GOOGLE_CLIENT_ID"),
+		MemberEmails:  strings.Split(os.Getenv("MEMBER_EMAILS"), ","),
 		Origins:       strings.Split(env("APP_ORIGINS", "https://maceclubheemskerk.eu,https://www.maceclubheemskerk.eu,https://maceclubheemskerk.vdzonsoftware.nl"), ","),
 		SecureCookies: env("COOKIE_SECURE", "true") != "false",
 	}
@@ -78,10 +89,10 @@ func run() error {
 	}
 	version := fmt.Sprintf("%x", fingerprint.Sum(nil))
 	server := &http.Server{
-		Addr: ":" + port, Handler: web.Handler(auth.New(cfg, store, verifier), version),
+		Addr: ":" + port, Handler: web.Handler(auth.New(cfg, store, verifier), version, library),
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

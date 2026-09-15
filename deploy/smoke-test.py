@@ -30,6 +30,7 @@ def main():
     image = sys.argv[1]
     container = subprocess.check_output([
         "docker", "run", "-d", "--read-only", "--user", "1000780000:0",
+        "--tmpfs", "/data:rw,noexec,nosuid,size=64m,mode=0770,uid=1000780000,gid=0",
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
         "-p", "127.0.0.1::8080", image,
     ], text=True).strip()
@@ -49,6 +50,8 @@ def main():
             ("/", "GET", 200, "text/html"),
             ("/style.css", "GET", 200, "text/css"),
             ("/healthz", "GET", 200, "application/json"),
+            ("/api/media", "GET", 200, "application/json"),
+            ("/favicon.svg", "GET", 200, "image/svg+xml"),
             ("/missing", "GET", 404, "text/plain"),
             ("/", "POST", 405, "text/plain"),
             ("/", "HEAD", 200, "text/html"),

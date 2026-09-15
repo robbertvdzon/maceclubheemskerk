@@ -14,6 +14,7 @@ type Config struct {
 	ClientID      string
 	Origins       []string
 	AllowedEmails []string
+	MemberEmails  []string
 	SecureCookies bool
 }
 
@@ -94,13 +95,25 @@ func (a *Auth) allowed(user User) bool {
 	}
 	return false
 }
+
+// CanEdit is independent of login permission and fails closed for an empty member list.
+func (a *Auth) CanEdit(user User) bool {
+	for _, email := range a.Config.MemberEmails {
+		if email != "" && strings.EqualFold(strings.TrimSpace(email), user.Email) {
+			return true
+		}
+	}
+	return false
+}
 func (a *Auth) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/auth/config", a.configuration)
 	mux.HandleFunc("POST /api/auth/google", a.login)
 	mux.HandleFunc("POST /api/auth/logout", a.logout)
 	mux.HandleFunc("GET /api/auth/me", a.me)
 	// This endpoint is the protected account surface, and a pattern for future member APIs.
-	mux.HandleFunc("GET /api/account", a.RequireUser(func(w http.ResponseWriter, r *http.Request, user User) { output(w, 200, map[string]any{"user": user}) }))
+	mux.HandleFunc("GET /api/account", a.RequireUser(func(w http.ResponseWriter, r *http.Request, user User) {
+		output(w, 200, map[string]any{"user": user, "canEdit": a.CanEdit(user)})
+	}))
 }
 func (a *Auth) configuration(w http.ResponseWriter, r *http.Request) {
 	if !a.Enabled() {
@@ -166,7 +179,7 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.setSession(w, token, session)
-	output(w, 200, map[string]any{"user": user})
+	output(w, 200, map[string]any{"user": user, "canEdit": a.CanEdit(user)})
 }
 func (a *Auth) setSession(w http.ResponseWriter, token string, s Session) {
 	a.cookie(w, "session", token, s.Expires, int(time.Until(s.Expires).Seconds()))
@@ -189,14 +202,14 @@ func (a *Auth) current(w http.ResponseWriter, r *http.Request) (User, error) {
 func (a *Auth) me(w http.ResponseWriter, r *http.Request) {
 	u, err := a.current(w, r)
 	if errors.Is(err, ErrUnauthenticated) {
-		output(w, 200, map[string]any{"user": nil})
+		output(w, 200, map[string]any{"user": nil, "canEdit": false})
 		return
 	}
 	if err != nil {
 		fail(w, 503, "Je account is tijdelijk niet bereikbaar.")
 		return
 	}
-	output(w, 200, map[string]any{"user": u})
+	output(w, 200, map[string]any{"user": u, "canEdit": a.CanEdit(u)})
 }
 func (a *Auth) RequireUser(next func(http.ResponseWriter, *http.Request, User)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

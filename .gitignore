@@ -7,3 +7,9 @@ secrets.env
 secrets.*.env
 !secrets.example.env
 __pycache__/
+
+/data/
+/backups/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

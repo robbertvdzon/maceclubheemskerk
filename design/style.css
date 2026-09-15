@@ -6,5 +6,3 @@
 /* Keep the rotated logo inside the hero on narrow screens. */
 .hero{overflow:hidden}
 .media-card{display:flex;flex-direction:column}.card-image{width:100%;flex-shrink:0}.card-body{width:100%}
-/* Live application: no prototype toolbar. */
-body{padding-bottom:0}.toast{bottom:24px}#google-button{min-height:44px;margin:24px 0}#login-status,#account-status{color:#944323}#media-stage iframe{width:100%;height:100%;position:absolute;inset:0;border:0}button:disabled{opacity:.6;cursor:wait;transform:none}.media-dialog{overflow-y:auto}#library-status:empty{display:none}
