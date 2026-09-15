@@ -1,6 +1,16 @@
 services:
   web:
     build: .
+    env_file:
+      - path: secrets.env
+        required: false
+        format: raw
+    environment:
+      SESSION_FILE: /data/sessions.json
+      APP_ORIGINS: http://localhost:18080,http://127.0.0.1:18080
+      COOKIE_SECURE: "false"
+    volumes:
+      - sessions:/data
     ports:
       - "127.0.0.1:18080:8080"
     read_only: true
@@ -18,5 +28,6 @@ services:
       - go-modules:/go/pkg/mod
     command: [go, vet, ./...]
 volumes:
+  sessions:
   go-cache:
   go-modules:

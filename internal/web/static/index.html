@@ -5,15 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Mace Club Heemskerk. Onze nieuwe website is in voorbereiding.">
     <title>Mace Club Heemskerk</title>
-    <link rel="stylesheet" href="/style.css">
+    <meta name="app-version" content="{{.Version}}">
+    <link rel="stylesheet" href="/style.css?v={{.Version}}">
+    <script src="/app.js?v={{.Version}}" defer></script>
   </head>
   <body>
-    <header><span class="mark" aria-hidden="true">MCH</span><span>Mace Club Heemskerk</span></header>
+    <header>
+      <span class="mark" aria-hidden="true">MCH</span><span class="club-name">Mace Club Heemskerk</span>
+      <button id="account-button" type="button">Inloggen</button>
+    </header>
     <main>
       <p class="eyebrow">Heemskerk</p>
       <h1>Mace Club<br><span>Heemskerk.</span></h1>
       <p class="intro">Onze nieuwe website is in voorbereiding.</p>
     </main>
+    <dialog id="login-dialog" aria-labelledby="login-title">
+      <button class="close-dialog" type="button" aria-label="Sluiten">×</button>
+      <h2 id="login-title">Inloggen</h2>
+      <p>Log in met je Google-account voor je persoonlijke clubomgeving.</p>
+      <div id="google-button"></div>
+      <p id="login-status" role="status" aria-live="polite"></p>
+      <p class="hint">Je blijft ingelogd op dit apparaat, ook als je de browser sluit. Gebruik je een gedeeld apparaat? Log dan na afloop uit.</p>
+    </dialog>
+    <dialog id="account-dialog" aria-labelledby="account-title">
+      <button class="close-dialog" type="button" aria-label="Sluiten">×</button>
+      <h2 id="account-title">Mijn account</h2>
+      <p id="account-name"></p>
+      <p id="account-email" class="hint"></p>
+      <p>Je bent ingelogd. Extra clubfuncties komen hier beschikbaar.</p>
+      <p id="account-status" role="status" aria-live="polite"></p>
+      <button id="logout-button" type="button">Uitloggen</button>
+    </dialog>
     <footer>Mace Club Heemskerk</footer>
   </body>
 </html>

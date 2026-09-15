@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-ALLOWED_KEYS = {"DATABASE_URL", "DATABASE_USER", "DATABASE_PASSWORD"}
+ALLOWED_KEYS = {"DATABASE_URL", "DATABASE_USER", "DATABASE_PASSWORD", "GOOGLE_CLIENT_ID", "ALLOWED_EMAILS"}
 
 
 def read_values(path):

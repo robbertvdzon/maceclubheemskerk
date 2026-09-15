@@ -3,19 +3,28 @@ package web
 import (
 	"bytes"
 	"embed"
+	"html/template"
 	"net/http"
 	"time"
+
+	"github.com/robbertvdzon/maceclubheemskerk/internal/auth"
 )
 
-//go:embed static/index.html static/style.css
+//go:embed static/*
 var assets embed.FS
 
-// Handler serves the site without a database or runtime filesystem dependencies.
-func Handler() http.Handler {
+func Handler(a *auth.Auth, version string) http.Handler {
 	mux := http.NewServeMux()
+	page := template.Must(template.ParseFS(assets, "static/index.html"))
+	var html bytes.Buffer
+	if err := page.Execute(&html, struct{ Version string }{version}); err != nil {
+		panic(err)
+	}
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(html.Bytes()))
+	})
 	for route, file := range map[string]string{
-		"GET /{$}":       "static/index.html",
-		"GET /style.css": "static/style.css",
+		"GET /style.css": "static/style.css", "GET /app.js": "static/app.js",
 	} {
 		body, err := assets.ReadFile(file)
 		if err != nil {
@@ -27,13 +36,23 @@ func Handler() http.Handler {
 	}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write([]byte("{\"status\":\"ok\"}\n"))
 	})
+	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{\"version\":\"" + version + "\"}\n"))
+	})
+	a.Register(mux)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		w.Header().Set("CDN-Cache-Control", "no-store")
+		w.Header().Set("Cloudflare-CDN-Cache-Control", "no-store")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; frame-src https://accounts.google.com; connect-src 'self' https://accounts.google.com; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 		mux.ServeHTTP(w, r)
 	})
 }

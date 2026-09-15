@@ -1,6 +1,6 @@
 # Mace Club Heemskerk
 
-Go-webserver met een tijdelijke Nederlandse startpagina. Geen database, JavaScript-build of lokale Go-installatie nodig. Docker compileert de Go-code; de runtime-image bevat alleen de binary en CA-certificaten.
+Go-webserver met een tijdelijke Nederlandse startpagina. Geen database, JavaScript-build of lokale Go-installatie nodig. Docker compileert de Go-code; de runtime-image bevat de binary, CA-certificaten en een mountpunt voor sessieopslag.
 
 ## Lokaal starten
 
@@ -27,9 +27,11 @@ docker compose run --rm tools go vet ./...
 docker compose run --rm tools go test ./...
 ```
 
-Er zijn nog geen Go-unit-tests; de webserver wordt met een build en HTTP-smoketests gecontroleerd. Voor de secrets-tooling zijn er gerichte Python-tests:
+Go-tests controleren Google-tokenverificatie, sessies, CSRF, toegangscontrole en caching. Daarnaast zijn er tests voor secrets-tooling en de JavaScript-versiecontrole:
 
 ```sh
+docker compose run --rm tools go test ./...
+node --test tests/version-monitor.test.cjs
 python3 -m unittest discover -s tests -v
 docker build --platform linux/amd64 -t maceclubheemskerk:verify .
 python3 deploy/smoke-test.py maceclubheemskerk:verify
@@ -41,13 +43,15 @@ De smoketest gebruikt een eigen tijdelijke container met een willekeurige UID, a
 ## Structuur
 
 - `cmd/server`: opstarten, timeouts en netjes stoppen bij SIGTERM.
-- `internal/web`: HTTP-routes en ingebouwde HTML/CSS.
+- `internal/web`: HTTP-routes en ingebouwde HTML/CSS/JavaScript.
+- `internal/auth`: Google-verificatie, sessieopslag en beveiligde account-API.
+- `GET /api/version`: fingerprint van de draaiende binary, inclusief alle ingebouwde assets.
 - `deploy`: OpenShift Deployment, Service, Routes, image-pin en SealedSecrets-tooling.
 - `.github/workflows/deploy.yml`: verificatie, image publiceren en GitOps image-pin.
 - `GET /healthz`: status voor OpenShift-probes.
 - `PORT`: luisterpoort, standaard `8080`.
 
-Later kan SQL vanuit Go via `database/sql` en een driver worden aangesloten. Voeg de opslaglaag toe wanneer de functionaliteit en databasekeuze bekend zijn. Er is nu geen opslag of schijnpersistentie.
+Later kan SQL vanuit Go via `database/sql` en een driver worden aangesloten. Voeg de opslaglaag toe wanneer de functionaliteit en databasekeuze bekend zijn. Voor login is er nu alleen een echt persistent sessiebestand op een PVC; er is nog geen SQL-database.
 
 ## Deployment naar OpenShift
 
@@ -110,8 +114,45 @@ Het script gebruikt `python3`, `kubeseal` en het publieke clustercertificaat uit
 - Het script schrijft `deploy/secrets/sealed-secret.json` en registreert dit in de bijbehorende Kustomization. Commit deze versleutelde bestanden; nooit `secrets.env`.
 - De versleuteling is gebonden aan namespace `maceclubheemskerk` en Secret `maceclubheemskerk-secrets`; kopieer dit niet naar een andere omgeving.
 - Argo CD synchroniseert het SealedSecret; de bestaande controller maakt het Secret. De Deployment leest dit via een optionele `envFrom`-referentie. De bestaande Reloader zorgt voor herstart bij secretwijzigingen.
-- De lokale Compose-service leest `secrets.env` voorlopig niet; dit wordt aangesloten wanneer de Go-app daadwerkelijk databaseconfiguratie gebruikt.
+- De lokale Compose-service leest `secrets.env` als ruwe waarden (geen shell- of dollar-expansie). De databasekeys worden pas gebruikt wanneer er een SQL-koppeling wordt gebouwd.
 
 ### Terugrollen
 
 Herstel de vorige werkende image-digest in `deploy/kustomization.yaml` en commit die met `[skip ci]`. Argo CD synchroniseert terug naar die versie. Zo overschrijft een nieuwe imagebuild de rollback niet direct.
+
+## Google-login en ingelogd blijven
+
+De startpagina blijft openbaar. De knop **Inloggen** opent de officiële Google-inlogknop. Een ingelogde bezoeker ziet **Mijn account** en kan uitloggen. Concrete extra clubfuncties moeten nog worden bepaald; inloggen geeft geen beheerdersrechten.
+
+De bestaande publieke Web OAuth-client-ID uit het project `tuinbewatering` (client `Robberts applicaties`) staat als `GOOGLE_CLIENT_ID` in het genegeerde `secrets.env` en in een SealedSecret. Er is geen Google client secret of Google refresh token nodig. Google geeft een kort geldig ID-token; de backend controleert de handtekening met de officiële Google Go-library en valideert audience, issuer, expiry, geverifieerde e-mail en eenmalige nonce. De gebruiker wordt geïdentificeerd met de stabiele Google `sub`.
+
+### Eenmalig instellen bij Google
+
+Voeg in **Google Cloud Console → Google Auth Platform → Clients → Robberts applicaties → Authorized JavaScript origins** toe:
+
+- `https://maceclubheemskerk.eu`
+- `https://www.maceclubheemskerk.eu`
+- `https://maceclubheemskerk.vdzonsoftware.nl`
+- `http://localhost:18080` voor lokaal testen
+
+Voor deze popup-login zijn geen redirect-URI's nodig. Als het Google-project nog in Testing staat, moeten de gewenste accounts ook als test users zijn toegestaan. De Google-consoleconfiguratie en een echte login moeten door Robbert worden bevestigd; tests gebruiken lokaal getekende testtokens en geen productie-bypass.
+
+### Sessies
+
+- Eigen willekeurig sessietoken in een `HttpOnly`, `Secure`, `SameSite=Lax`, host-only cookie; geen login-token in localStorage. Op localhost gebruikt Compose expliciet een niet-Secure cookie; de server weigert die instelling voor publieke origins.
+- Een sessie is 365 dagen geldig en wordt bij gebruik maximaal eenmaal per uur voor een jaar verlengd. De frontend controleert zijn sessie bij openen, terugkeren naar de tab en elk uur. Actieve bezoekers hoeven daardoor niet periodiek via Google in te loggen.
+- Uitloggen trekt het token server-side in. Browsergegevens verwijderen, een jaar inactiviteit of verlies van de sessieopslag vereisen opnieuw inloggen. Sessies zijn per host: de twee eigen domeinnamen en het vdzonsoftware-adres delen geen cookie.
+- `ALLOWED_EMAILS` kan een komma-gescheiden toegangslijst bevatten. Leeg betekent dat ieder geverifieerd Google-account mag inloggen; ook bestaande sessies worden bij iedere accountaanvraag opnieuw aan deze lijst getoetst.
+- `SESSION_FILE` wijst naar een JSON-bestand met alleen tokenhashes, Google-gebruikersgegevens en vervaltijden. Het bestand wordt atomisch vervangen en is exclusief gelockt. Schrijffouten weigeren login; ze vallen niet terug naar tijdelijke sessies.
+- OpenShift mount `maceclubheemskerk-sessions` op `/data`. Deze PVC blijft bij deployments bewaard en wordt niet automatisch door Argo CD gepruned. Maak bij een clusterherstel ook deze data terug beschikbaar om sessies te behouden.
+- Zolang bestandopslag wordt gebruikt: één replica en `Recreate`, zodat twee pods nooit onafhankelijk dezelfde sessies aanpassen. Dit geeft een korte onderbreking tijdens deploys. Meerdere replica's vragen later om gedeelde transactionele opslag zoals SQL.
+- Lokaal gebruikt Docker Compose de named volume `sessions`. `docker compose down` bewaart de sessies; `down -v` verwijdert ze.
+- Nieuwe beschermde API's moeten `Auth.RequireUser` gebruiken. Muterende requests worden daarnaast op de exacte Origin gecontroleerd. Er is geen auth-bypass voor productie of automatische testers.
+
+## Nieuwe versies direct zichtbaar
+
+Alle HTML, CSS, JavaScript en API-responses gebruiken `Cache-Control: no-store` en expliciete no-store-headers voor Cloudflare. De HTML verwijst naar CSS en JS met de versie in de URL. Er is geen service worker.
+
+De fingerprint in `/api/version` is de SHA-256 van de daadwerkelijk draaiende Go-binary; ook backendwijzigingen tellen mee. Een zichtbare pagina controleert om de drie seconden en bij terugkeer naar de tab. Bij een verschil wordt de pagina automatisch vervangen door de nieuwe versie met een cache-busting queryparameter. Tijdelijke netwerkfouten laten de bestaande pagina intact. Tijdens de login-uitwisseling wordt niet herladen.
+
+De sessiecookie en de PVC blijven bestaan bij herladen en deployen. Een tab die nog de oude versie van vóór deze monitor bevat, moet één keer handmatig worden vernieuwd om de monitor te laden. Toekomstige formulieren met onopgeslagen invoer moeten vóór automatisch herladen expliciet worden beschermd.

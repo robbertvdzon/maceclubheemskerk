@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: maceclubheemskerk
 resources:
 - app.yaml
+- sessions-pvc.yaml
 - route-vdzonsoftware.yaml
 - secrets
 images:

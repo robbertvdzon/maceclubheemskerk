@@ -9,3 +9,19 @@ h1 { margin: 0; font-size: clamp(2.5rem, 9vw, 8rem); font-weight: 850; letter-sp
 h1 span { color: #d5ff3f; }
 .intro { margin: 2rem 0 0; max-width: 35rem; color: #c5c8ca; font-size: clamp(1.125rem, 2vw, 1.35rem); line-height: 1.6; }
 footer { border-top: 1px solid #3b3e40; padding: 1.5rem 0; color: #b4b8bb; font-size: .875rem; }
+
+[hidden] { display: none !important; }
+.club-name { flex: 1; }
+button { font: inherit; cursor: pointer; background: #d5ff3f; color: #151719; border: 0; border-radius: .25rem; padding: .7rem 1rem; font-weight: 650; }
+button:hover { background: #e1ff79; }
+button:focus-visible { outline: 3px solid white; outline-offset: 4px; }
+button:disabled { cursor: wait; opacity: .65; }
+dialog { color: #f5f5f2; background: #202427; border: 1px solid #555d62; border-radius: .5rem; width: min(30rem, calc(100% - 2rem)); padding: 2rem; }
+dialog::backdrop { background: rgb(0 0 0 / .7); }
+dialog h2 { margin-top: .5rem; }
+dialog p { line-height: 1.6; overflow-wrap: anywhere; }
+.close-dialog { float: right; margin: -.75rem -.75rem 0 .5rem; background: transparent; color: white; font-size: 1.5rem; }
+.hint { color: #c5c8ca; font-size: .875rem; }
+#login-status, #account-status { color: #d5ff3f; }
+#google-button { min-height: 44px; margin: 1.5rem 0; }
+@media (max-width: 400px) { header { flex-wrap: wrap; } .club-name { min-width: 9rem; } }

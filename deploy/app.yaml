@@ -6,6 +6,8 @@ metadata:
     secret.reloader.stakater.com/reload: maceclubheemskerk-secrets
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: maceclubheemskerk
@@ -19,6 +21,10 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      volumes:
+        - name: sessions
+          persistentVolumeClaim:
+            claimName: maceclubheemskerk-sessions
       containers:
         - name: web
           image: ghcr.io/robbertvdzon/maceclubheemskerk:bootstrap
@@ -26,6 +32,12 @@ spec:
             - secretRef:
                 name: maceclubheemskerk-secrets
                 optional: true
+          env:
+            - name: SESSION_FILE
+              value: /data/sessions.json
+          volumeMounts:
+            - name: sessions
+              mountPath: /data
           ports:
             - name: http
               containerPort: 8080
