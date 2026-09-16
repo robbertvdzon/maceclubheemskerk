@@ -64,6 +64,9 @@ func (s *Store) registerManagement(mux *http.ServeMux, a *auth.Auth) {
 		}
 		send(w, 200, map[string]any{"items": items})
 	}))
+	mux.HandleFunc("GET /api/playlists", s.getPlaylists)
+	mux.HandleFunc("POST /api/playlists", member(s.addPlaylist))
+	mux.HandleFunc("DELETE /api/playlists/{id}", member(s.deletePlaylist))
 	mux.HandleFunc("GET /api/bingo", s.getBingo)
 	mux.HandleFunc("PATCH /api/bingo/{id}", member(s.updateBingo))
 }

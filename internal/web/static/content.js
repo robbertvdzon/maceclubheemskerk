@@ -1,7 +1,7 @@
  'use strict';
 (() => {
  const $=s=>document.querySelector(s),club=window.MCH;
- let items=[],photoURL='',videoURL='',activeUpload=null,saving=false,loading=false,toastTimer,managing=false;
+ let items=[],photoURL='',videoURL='',activeUpload=null,saving=false,loading=false,toastTimer,managing=false,editMode=false;
  const librarySection=$('[data-library]')?.dataset.library;
  const icon=name=>`<svg aria-hidden="true"><use href="#${name}"/></svg>`;
  const titleOf=item=>item.title||(item.type==='photo'?'Foto':'Filmpje');
@@ -14,7 +14,7 @@
   if(item.type==='video'){const play=document.createElement('span');play.className='play-circle';play.innerHTML=icon('play');visual.append(play);}
   const body=document.createElement('div');body.className='card-body';const meta=document.createElement('div');meta.className='card-meta';meta.textContent=(item.type==='photo'?'FOTO · ':'FILMPJE · ')+new Date(item.createdAt).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'});
   const h=document.createElement('h2');h.textContent=titleOf(item);body.append(meta,h);if(item.description){const p=document.createElement('p');p.textContent=item.description;body.append(p);}button.append(visual,body);button.addEventListener('click',()=>openMedia(item));article.append(button);
-  if(club.canEdit){const tools=document.createElement('div');tools.className='media-tools';
+  if(club.canEdit&&editMode){const tools=document.createElement('div');tools.className='media-tools';
    const action=(label,aria,callback,disabled=false)=>{const b=document.createElement('button');b.type='button';b.className='text-button';b.textContent=label;b.setAttribute('aria-label',aria);b.disabled=disabled||managing;b.addEventListener('click',callback);tools.append(b);};
    action('Tekst',`Tekst aanpassen: ${titleOf(item)}`,()=>openEdit(item));
    action('Verwijderen',`Verwijderen: ${titleOf(item)}`,()=>openDelete(item));
@@ -22,9 +22,10 @@
    action('↓',`Omlaag: ${titleOf(item)}`,()=>move(item,'down'),index===items.length-1);article.append(tools);
   }return article;
  }
- function render(){if($('#media-grid')){$('#media-grid').replaceChildren(...items.map(makeCard));$('#media-empty').hidden=items.length>0;}document.querySelectorAll('.member-only').forEach(el=>el.hidden=!club.canEdit);}
+ function render(){if(!club.canEdit)editMode=false;const toggle=$('#media-edit-mode');if(toggle){toggle.textContent=editMode?'✓ Klaar met bewerken':'✎ Bewerken';toggle.setAttribute('aria-pressed',String(editMode));}if($('#open-trash'))$('#open-trash').hidden=!club.canEdit||!editMode;if($('#media-grid')){$('#media-grid').replaceChildren(...items.map(makeCard));$('#media-empty').hidden=items.length>0;}document.querySelectorAll('.member-only').forEach(el=>el.hidden=!club.canEdit);}
  async function refreshLibrary(){if(loading)return;loading=true;try{const data=await club.api('/api/media');items=data.items.filter(item=>!librarySection||item.section===librarySection);club.revision=data.revision;if($('#library-status'))$('#library-status').textContent='';render();}catch{if($('#library-status'))$('#library-status').textContent='Laden is niet gelukt. We proberen het zo opnieuw.';}finally{loading=false;}}
- club.refreshLibrary=refreshLibrary;
+ if(librarySection)club.refreshLibrary=refreshLibrary;
+ $('#media-edit-mode')?.addEventListener('click',()=>{if(!club.canEdit||managing)return;editMode=!editMode;render();});
  window.addEventListener('club-auth',()=>{if(!club.canEdit&&!saving){for(const id of ['add-dialog','edit-dialog','delete-dialog','trash-dialog'])if($('#'+id).open)$('#'+id).close();}render();});
  document.querySelectorAll('[data-add]').forEach(b=>b.addEventListener('click',()=>openAdd(b.dataset.add)));
  $('[data-close].text-button')?.addEventListener('click',()=>{if(!saving)$('#add-dialog').close();});
@@ -94,5 +95,5 @@
   $('#media-dialog').showModal();
  }
  $('#media-dialog').addEventListener('close',()=>{const video=$('#media-stage video');if(video){video.pause();video.removeAttribute('src');video.load();}$('#media-stage').replaceChildren();});
- render();refreshLibrary();
+ render();if(librarySection)refreshLibrary();
 })();

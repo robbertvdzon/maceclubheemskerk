@@ -22,7 +22,7 @@ func Handler(a *auth.Auth, version string, stores ...*content.Store) http.Handle
 	}
 	mux := http.NewServeMux()
 	page := template.Must(template.ParseFS(assets, "static/index.html"))
-	pages := []struct{ Path, Page, Title string }{{"/", "home", "Home"}, {"/oefeningen", "exercises", "Oefeningen"}, {"/fotos-en-filmpjes", "media", "Foto’s en filmpjes"}, {"/wie-zijn-wij", "about", "Wie zijn wij"}, {"/bingo", "bingo", "Lennarts bingo"}}
+	pages := []struct{ Path, Page, Title string }{{"/", "home", "Home"}, {"/oefeningen", "exercises", "Oefeningen"}, {"/fotos-en-filmpjes", "media", "Foto’s en filmpjes"}, {"/wie-zijn-wij", "about", "Wie zijn wij"}, {"/bingo", "bingo", "Bingo"}, {"/playlists", "playlists", "Playlists"}}
 	for _, entry := range pages {
 		var html bytes.Buffer
 		if err := page.Execute(&html, struct{ Version, Page, Title string }{version, entry.Page, entry.Title}); err != nil {
@@ -37,7 +37,8 @@ func Handler(a *auth.Auth, version string, stores ...*content.Store) http.Handle
 		})
 	}
 	for route, file := range map[string]string{
-		"GET /style.css": "static/style.css", "GET /app.js": "static/app.js",
+		"GET /playlists.js": "static/playlists.js",
+		"GET /style.css":    "static/style.css", "GET /app.js": "static/app.js",
 		"GET /robbert-approved.webp":   "static/robbert-approved.webp",
 		"GET /steve-approved.webp":     "static/steve-approved.webp",
 		"GET /club-approved.webp":      "static/club-approved.webp",
@@ -87,7 +88,7 @@ func Handler(a *auth.Auth, version string, stores ...*content.Store) http.Handle
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; media-src 'self' blob:; img-src 'self' blob: https://i.ytimg.com; frame-src https://accounts.google.com https://www.youtube-nocookie.com; connect-src 'self' https://accounts.google.com; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; media-src 'self' blob:; img-src 'self' blob: https://i.ytimg.com; frame-src https://accounts.google.com https://www.youtube-nocookie.com https://open.spotify.com; connect-src 'self' https://accounts.google.com; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 		mux.ServeHTTP(w, r)
 	})
 }

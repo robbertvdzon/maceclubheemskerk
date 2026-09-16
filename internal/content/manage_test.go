@@ -91,7 +91,7 @@ func TestManagementAndMigration(t *testing.T) {
 				mux.ServeHTTP(w, r)
 				return w
 			}
-			for _, route := range []struct{ method, path string }{{"PATCH", "/api/media/1"}, {"DELETE", "/api/media/1"}, {"POST", "/api/media/1/move"}, {"POST", "/api/media/1/restore"}, {"PATCH", "/api/bingo/1"}, {"GET", "/api/media/trash"}} {
+			for _, route := range []struct{ method, path string }{{"PATCH", "/api/media/1"}, {"DELETE", "/api/media/1"}, {"POST", "/api/media/1/move"}, {"POST", "/api/media/1/restore"}, {"PATCH", "/api/bingo/1"}, {"GET", "/api/media/trash"}, {"POST", "/api/playlists"}, {"DELETE", "/api/playlists/4zbpTuVArXmyTCdaBXOudH"}} {
 				for _, who := range []struct {
 					token string
 					want  int
@@ -220,6 +220,56 @@ func TestManagementAndMigration(t *testing.T) {
 			call("PATCH", "/api/bingo/1", `{"text":"Mijn mace slaapt nog","checked":false,"version":2}`, 200)
 			if bingo()[0].Checked {
 				t.Fatal("unchecking failed")
+			}
+
+			playlists := func() []Playlist {
+				w := request("GET", "/api/playlists", "", "", "")
+				if w.Code != 200 {
+					t.Fatal(w.Code, w.Body.String())
+				}
+				var result struct{ Items []Playlist }
+				if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+					t.Fatal(err)
+				}
+				return result.Items
+			}
+			seed := playlists()
+			if len(seed) != 1 || seed[0].ID != "4zbpTuVArXmyTCdaBXOudH" {
+				t.Fatal("missing initial playlist", seed)
+			}
+			const addedURL = "https://open.spotify.com/playlist/abcdefghijklmnopqrstuv?si=tracking"
+			payload := `{"url":"` + addedURL + `","title":"Clubmuziek"}`
+			before = list().Revision
+			call("POST", "/api/playlists", `{"url":"https://evil.test/playlist/abcdefghijklmnopqrstuv"}`, 400)
+			if list().Revision != before {
+				t.Fatal("invalid playlist changed revision")
+			}
+			call("POST", "/api/playlists", payload, 201)
+			call("POST", "/api/playlists", payload, 409)
+			if list().Revision != before+1 || len(playlists()) != 2 {
+				t.Fatal("playlist insert/duplicate failed")
+			}
+			call("DELETE", "/api/playlists/abcdefghijklmnopqrstuv", `{"revision":0}`, 409)
+			mutate("DELETE", "/api/playlists/abcdefghijklmnopqrstuv", "", 200)
+			if len(playlists()) != 1 {
+				t.Fatal("playlist not hidden")
+			}
+			call("POST", "/api/playlists", payload, 201)
+			if got := playlists(); len(got) != 2 || got[1].Title != "Clubmuziek" {
+				t.Fatal("playlist not restored", got)
+			}
+			// A removed initial playlist must not be reseeded by startup/migration.
+			mutate("DELETE", "/api/playlists/4zbpTuVArXmyTCdaBXOudH", "", 200)
+			s.Close()
+			s, e = OpenWithVideoDir(target, filepath.Join(dir, "videos"))
+			if e != nil {
+				t.Fatal(e)
+			}
+			s.dir = dir
+			mux = http.NewServeMux()
+			s.Register(mux, a)
+			if got := playlists(); len(got) != 1 || got[0].ID != "abcdefghijklmnopqrstuv" {
+				t.Fatal("playlist state lost on restart", got)
 			}
 
 			// Upgrade a schema-3 board without touching other cells or custom center text.
