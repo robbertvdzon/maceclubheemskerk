@@ -9,7 +9,7 @@
  function validate(){const p=bounds();if(!Number.isFinite(p.start)||!Number.isFinite(p.end)||p.start<0||p.end>duration+.001||p.end-p.start<.1)throw Error('Kies een begin en einde binnen de video, met minimaal 0,1 seconde ertussen.');if(!Number.isFinite(p.thumbnailTime)||p.thumbnailTime<p.start||p.thumbnailTime>=p.end)throw Error('Kies een thumbnail binnen het fragment.');return p;}
  function changed(which){previewing=false;video.pause();const p=bounds();if(Number.isFinite(p.start)&&Number.isFinite(p.end)){
   $('#clip-duration').textContent=p.end>p.start?'Fragment: '+format(p.end-p.start):'Het einde moet na het begin liggen.';
-  if(p.thumbnailTime<p.start||p.thumbnailTime>=p.end||!Number.isFinite(p.thumbnailTime))$('#clip-thumbnail-time').value=format(p.start);
+  if(p.thumbnailTime<p.start||p.thumbnailTime>=p.end||!Number.isFinite(p.thumbnailTime)){$('#clip-thumbnail-time').value=format(p.start);$('#clip-thumbnail-canvas').hidden=true;}
   $('#clip-start-range').value=String(p.start);$('#clip-end-range').value=String(p.end);
   if(which&&Number.isFinite(p[which]))video.currentTime=Math.min(duration-.001,Math.max(0,p[which]));
  }}
