@@ -7,13 +7,25 @@
  const titleOf=item=>item.title||(item.type==='photo'?'Foto':'Filmpje');
  function makeCard(item,index){
   const article=document.createElement('article');article.className='media-item';
-  const button=document.createElement('button');button.type='button';button.className='media-card';button.setAttribute('aria-label',`Bekijk ${item.type==='photo'?'foto':'filmpje'}: ${titleOf(item)}`);
+  const card=document.createElement('div');card.className='media-card';
+  const button=document.createElement('button');button.type='button';button.className='media-open';button.setAttribute('aria-label',`Bekijk ${item.type==='photo'?'foto':'filmpje'}: ${titleOf(item)}`);
   const visual=document.createElement('div');visual.className='card-image';
   if(!item.video||item.thumbnail){const img=document.createElement('img');img.className='training-visual';img.alt='';img.loading='lazy';img.decoding='async';img.src=item.thumbnail||item.photo||`https://i.ytimg.com/vi/${item.youtube}/hqdefault.jpg`;visual.append(img);}
   else{visual.classList.add('uploaded-video');const label=document.createElement('span');label.textContent='MACE CLUB / VIDEO';visual.append(label);}
   if(item.type==='video'){const play=document.createElement('span');play.className='play-circle';play.innerHTML=icon('play');visual.append(play);}
   const body=document.createElement('div');body.className='card-body';const meta=document.createElement('div');meta.className='card-meta';meta.textContent=(item.type==='photo'?'FOTO · ':'FILMPJE · ')+new Date(item.createdAt).toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'});
-  const h=document.createElement('h2');h.textContent=titleOf(item);body.append(meta,h);if(item.description){const p=document.createElement('p');p.textContent=item.description;body.append(p);}button.append(visual,body);button.addEventListener('click',()=>openMedia(item));article.append(button);
+  const h=document.createElement('h2');const title=document.createElement('button');title.type='button';title.className='media-title-button';title.textContent=titleOf(item);title.addEventListener('click',()=>openMedia(item));h.append(title);body.append(meta,h);
+  if(librarySection==='exercise'&&item.youtube&&item.playback?.chapters?.length){
+   const chapters=document.createElement('div');chapters.className='card-chapters';chapters.setAttribute('role','group');chapters.setAttribute('aria-label',`Oefeningen in ${titleOf(item)}`);
+   for(const chapter of item.playback.chapters){
+    const link=document.createElement('button');link.type='button';link.className='chip';link.textContent=chapter.title;
+    link.setAttribute('aria-label',`${chapter.title}, afspelen vanaf ${window.MCHVideoEditor.format(chapter.time)}`);
+    link.addEventListener('click',()=>openMedia(item,chapter.time));chapters.append(link);
+   }
+   body.append(chapters);
+  }
+  if(item.description){const p=document.createElement('p');p.textContent=item.description;body.append(p);}
+  button.append(visual);button.addEventListener('click',()=>openMedia(item));card.append(button,body);article.append(card);
   if(club.canEdit&&editMode){const tools=document.createElement('div');tools.className='media-tools';
    const action=(label,aria,callback,disabled=false)=>{const b=document.createElement('button');b.type='button';b.className='text-button';b.textContent=label;b.setAttribute('aria-label',aria);b.disabled=disabled||managing;b.addEventListener('click',callback);tools.append(b);};
    action('Tekst',`Tekst aanpassen: ${titleOf(item)}`,()=>openEdit(item));
@@ -88,10 +100,10 @@
  $('#add-dialog').addEventListener('cancel',e=>{if(saving)e.preventDefault();});
  $('#add-dialog').addEventListener('close',()=>{clearVideoPreview();if(photoURL){URL.revokeObjectURL(photoURL);photoURL='';} $('#photo-preview').hidden=true;});
  function toast(message){$('#toast').textContent=message;$('#toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').hidden=true,5000);}
- function openMedia(item){
+ function openMedia(item,chapterTime){
   const stage=$('#media-stage');stage.replaceChildren();$('#media-title').textContent=titleOf(item);$('#media-description').textContent=item.description;$('#media-label').textContent=item.type==='photo'?'HET CLUBALBUM':'MACE CLUB / VIDEOBIBLIOTHEEK';$('#youtube-link').hidden=!item.youtube;
   $('#media-chapters').replaceChildren();
-  if(item.youtube){$('#youtube-link').href='https://www.youtube.com/watch?v='+item.youtube;const frame=document.createElement('iframe');const playback=item.playback||{};const seek=(time,autoplay=false)=>{const params=new URLSearchParams();params.set('start',String(Math.floor(time||0)));if(playback.end)params.set('end',String(Math.ceil(playback.end)));if(autoplay)params.set('autoplay','1');frame.src='https://www.youtube-nocookie.com/embed/'+item.youtube+'?'+params;$('#youtube-link').href='https://www.youtube.com/watch?v='+item.youtube+'&t='+Math.floor(time||0)+'s';};seek(playback.start);for(const chapter of playback.chapters||[]){const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=window.MCHVideoEditor.format(chapter.time)+' · '+chapter.title;b.addEventListener('click',()=>{seek(chapter.time,true);$('#media-chapters').querySelectorAll('button').forEach(el=>el.setAttribute('aria-pressed',String(el===b)));});$('#media-chapters').append(b);}frame.title=titleOf(item);frame.allow='accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture';frame.allowFullscreen=true;frame.referrerPolicy='strict-origin-when-cross-origin';stage.append(frame);}
+  if(item.youtube){$('#youtube-link').href='https://www.youtube.com/watch?v='+item.youtube;const frame=document.createElement('iframe');const playback=item.playback||{};const seek=(time,autoplay=false)=>{const params=new URLSearchParams();params.set('start',String(Math.floor(time||0)));if(playback.end)params.set('end',String(Math.ceil(playback.end)));if(autoplay)params.set('autoplay','1');frame.src='https://www.youtube-nocookie.com/embed/'+item.youtube+'?'+params;$('#youtube-link').href='https://www.youtube.com/watch?v='+item.youtube+'&t='+Math.floor(time||0)+'s';};seek(chapterTime??playback.start,chapterTime!==undefined);for(const chapter of playback.chapters||[]){const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=window.MCHVideoEditor.format(chapter.time)+' · '+chapter.title;b.setAttribute('aria-pressed',String(chapter.time===chapterTime));b.addEventListener('click',()=>{seek(chapter.time,true);$('#media-chapters').querySelectorAll('button').forEach(el=>el.setAttribute('aria-pressed',String(el===b)));});$('#media-chapters').append(b);}frame.title=titleOf(item);frame.allow='accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture';frame.allowFullscreen=true;frame.referrerPolicy='strict-origin-when-cross-origin';stage.append(frame);}
   else if(item.video){const video=document.createElement('video');video.controls=true;video.playsInline=true;video.preload='metadata';video.src=item.video;if(item.thumbnail)video.poster=item.thumbnail;video.setAttribute('aria-label',titleOf(item));video.addEventListener('error',()=>{$('#media-description').textContent='Deze video kan niet worden afgespeeld. Controleer of het bestand H.264-video en AAC-geluid gebruikt.';});stage.append(video);}
   else{const img=document.createElement('img');img.src=item.photo;img.alt=titleOf(item);stage.append(img);}
   $('#media-dialog').showModal();
