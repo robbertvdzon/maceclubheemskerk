@@ -9,6 +9,6 @@ resources:
 - route-vdzonsoftware.yaml
 - secrets
 images:
-- digest: sha256:eb8697cf8c2388ee0d0e99e0a5b42da392d8f2708da04c9e47dfe11057c591a6
+- digest: sha256:d580f43235ca2d26b9dde198078963feec68546e3da983ebe65cee821c916005
   name: ghcr.io/robbertvdzon/maceclubheemskerk
   newName: ghcr.io/robbertvdzon/maceclubheemskerk
