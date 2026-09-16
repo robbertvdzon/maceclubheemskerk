@@ -43,7 +43,7 @@ func (s *Store) registerManagement(mux *http.ServeMux, a *auth.Auth) {
 		mux.HandleFunc(route, member(s.manageMedia))
 	}
 	mux.HandleFunc("GET /api/media/trash", member(func(w http.ResponseWriter, r *http.Request, u auth.User) {
-		rows, err := s.db.QueryContext(r.Context(), "SELECT id,title,kind FROM media WHERE deleted_at<>'' ORDER BY deleted_at DESC")
+		rows, err := s.db.QueryContext(r.Context(), "SELECT id,title,kind,section FROM media WHERE deleted_at<>'' ORDER BY deleted_at DESC")
 		if err != nil {
 			failure(w, 503, "De prullenbak is tijdelijk niet beschikbaar.")
 			return
@@ -52,7 +52,7 @@ func (s *Store) registerManagement(mux *http.ServeMux, a *auth.Auth) {
 		items := []Item{}
 		for rows.Next() {
 			var i Item
-			if err = rows.Scan(&i.ID, &i.Title, &i.Type); err != nil {
+			if err = rows.Scan(&i.ID, &i.Title, &i.Type, &i.Section); err != nil {
 				failure(w, 503, "Laden mislukt.")
 				return
 			}
@@ -74,8 +74,8 @@ func (s *Store) manageMedia(w http.ResponseWriter, r *http.Request, _ auth.User)
 		return
 	}
 	var body struct {
-		Title, Description, Direction string
-		Revision                      int64
+		Title, Description, Direction, Section string
+		Revision                               int64
 	}
 	if !decodeSmall(w, r, &body) {
 		return
@@ -104,8 +104,8 @@ func (s *Store) manageMedia(w http.ResponseWriter, r *http.Request, _ auth.User)
 		return
 	}
 	var position int64
-	var deleted string
-	if e = tx.QueryRowContext(r.Context(), s.bind("SELECT sort_order,deleted_at FROM media WHERE id=?"), id).Scan(&position, &deleted); e != nil {
+	var deleted, section, kind string
+	if e = tx.QueryRowContext(r.Context(), s.bind("SELECT sort_order,deleted_at,section,kind FROM media WHERE id=?"), id).Scan(&position, &deleted, &section, &kind); e != nil {
 		failure(w, 404, "Dit item bestaat niet meer.")
 		return
 	}
@@ -116,19 +116,26 @@ func (s *Store) manageMedia(w http.ResponseWriter, r *http.Request, _ auth.User)
 		failure(w, 404, "Dit item staat in de prullenbak.")
 		return
 	case r.Method == "PATCH":
-		_, e = tx.ExecContext(r.Context(), s.bind("UPDATE media SET title=?,description=? WHERE id=?"), body.Title, body.Description, id)
+		if body.Section != "" {
+			section = body.Section
+		}
+		if (section != "exercise" && section != "training") || (section == "exercise" && kind != "video") {
+			failure(w, 400, "Kies een geldige pagina; oefeningen zijn alleen video's.")
+			return
+		}
+		_, e = tx.ExecContext(r.Context(), s.bind("UPDATE media SET title=?,description=?,section=? WHERE id=?"), body.Title, body.Description, section, id)
 	case r.Method == "DELETE":
 		_, e = tx.ExecContext(r.Context(), s.bind("UPDATE media SET deleted_at=? WHERE id=?"), time.Now().UTC().Format(time.RFC3339Nano), id)
 	case strings.HasSuffix(r.URL.Path, "/move"):
-		query := "SELECT id,sort_order FROM media WHERE deleted_at='' AND sort_order<? ORDER BY sort_order DESC LIMIT 1"
+		query := "SELECT id,sort_order FROM media WHERE deleted_at='' AND section=? AND sort_order<? ORDER BY sort_order DESC LIMIT 1"
 		if body.Direction == "down" {
-			query = "SELECT id,sort_order FROM media WHERE deleted_at='' AND sort_order>? ORDER BY sort_order ASC LIMIT 1"
+			query = "SELECT id,sort_order FROM media WHERE deleted_at='' AND section=? AND sort_order>? ORDER BY sort_order ASC LIMIT 1"
 		} else if body.Direction != "up" {
 			failure(w, 400, "Kies omhoog of omlaag.")
 			return
 		}
 		var neighbor, otherPosition int64
-		e = tx.QueryRowContext(r.Context(), s.bind(query), position).Scan(&neighbor, &otherPosition)
+		e = tx.QueryRowContext(r.Context(), s.bind(query), section, position).Scan(&neighbor, &otherPosition)
 		if errors.Is(e, sql.ErrNoRows) {
 			send(w, 200, map[string]bool{"ok": true})
 			return

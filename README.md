@@ -159,9 +159,9 @@ De sessiecookie en de PVC blijven bestaan bij herladen en deployen. Een tab die 
 
 ## Losse pagina’s, media en bingo
 
-- `/`: homepage; `/fotos-en-filmpjes`: één lijst; `/wie-zijn-wij`: leden; `/bingo`: Lennarts excuses-bingo. Alle pagina’s zijn openbaar.
-- Alleen leden uit `MEMBER_EMAILS` zien beheerknoppen. Titel en beschrijving zijn optioneel bij alle uploads. Er zijn geen categorieën meer.
-- `PATCH /api/media/{id}` bewerkt tekst; `POST .../move` verplaatst omhoog/omlaag; `DELETE` verplaatst naar de prullenbak; `POST .../restore` herstelt. Mutaties vereisen de actuele `revision`; conflicten geven 409. Bestanden blijven bewaard, maar verwijderde media zijn niet openbaar opvraagbaar. `GET /api/media/trash` is alleen voor leden.
+- `/`: homepage; `/oefeningen`: oefenvideo’s (YouTube en eigen uploads), zonder categorieën; `/fotos-en-filmpjes`: het clubalbum met trainingen; `/wie-zijn-wij`: leden; `/bingo`: Lennarts excuses-bingo. Alle pagina’s zijn openbaar.
+- Alleen leden uit `MEMBER_EMAILS` zien beheerknoppen. Titel en beschrijving zijn optioneel bij alle uploads. Beide lijsten hebben geen categorieën. Volgorde en prullenbak gelden per pagina. Oefeningen accepteren alleen video’s; foto’s horen in het clubalbum. Via Tekst → Pagina kun je een filmpje tussen de twee pagina’s verplaatsen.
+- `PATCH /api/media/{id}` bewerkt tekst en optioneel `section`; `POST .../move` verplaatst omhoog/omlaag; `DELETE` verplaatst naar de prullenbak; `POST .../restore` herstelt. Mutaties vereisen de actuele `revision`; conflicten geven 409. Bestanden blijven bewaard, maar verwijderde media zijn niet openbaar opvraagbaar. `GET /api/media/trash` is alleen voor leden.
 - `GET /api/bingo` is openbaar; `PATCH /api/bingo/{id}` is voor leden en bewaart `text`, `checked` en de verwachte `version`. De 25 startvakjes worden één keer ingevoegd; latere deploys bewaren de aanpassingen.
 
 ### Uploads en opslag

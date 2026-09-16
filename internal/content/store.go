@@ -237,7 +237,9 @@ func Validate(i *Item) error {
 	if i.Type != "video" && i.Type != "photo" {
 		return errors.New("Kies een video of foto.")
 	}
-	i.Section = "training"
+	if i.Section == "exercise" && i.Type != "video" {
+		return errors.New("Voeg een oefening toe als YouTube-video of videobestand.")
+	}
 	i.Category = ""
 	if i.Type == "video" && !youtubePattern.MatchString(i.YouTube) && !videoPattern.MatchString(i.videoFile) {
 		return errors.New("Ongeldige video.")

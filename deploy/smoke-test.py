@@ -51,6 +51,7 @@ def main():
                 time.sleep(0.2)
         for case in [
             ("/", "GET", 200, "text/html"),
+            ("/oefeningen", "GET", 200, "text/html"),
             ("/fotos-en-filmpjes", "GET", 200, "text/html"),
             ("/wie-zijn-wij", "GET", 200, "text/html"),
             ("/bingo", "GET", 200, "text/html"),

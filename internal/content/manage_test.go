@@ -127,15 +127,41 @@ func TestManagementAndMigration(t *testing.T) {
 				revision := list().Revision
 				call(method, path, fmt.Sprintf(`{"revision":%d%s}`, revision, fields), want)
 			}
+			call("POST", "/api/media", `{"section":"exercise","title":"","category":"","url":"https://youtu.be/abcdefghijk"}`, 201)
+			call("POST", "/api/media", `{"section":"training","title":"Album","url":"https://youtu.be/abcdefghijk"}`, 201)
+			sections := func(section string) []int64 {
+				var ids []int64
+				for _, item := range list().Items {
+					if item.Section == section {
+						ids = append(ids, item.ID)
+					}
+				}
+				return ids
+			}
+			albumOrder := fmt.Sprint(sections("training"))
 			mutate("PATCH", "/api/media/1", `,"title":"Updated","description":"New text"`, 200)
 			call("PATCH", "/api/media/1", `{"revision":2,"title":"stale"}`, 409)
 			mutate("POST", "/api/media/1/move", `,"direction":"up"`, 200)
 			v = list()
-			if v.Items[1].ID != 1 {
+			if fmt.Sprint(sections("exercise")) != "[1 4]" || fmt.Sprint(sections("training")) != albumOrder {
 				t.Fatal("order not changed", v)
 			}
 			mutate("POST", "/api/media/1/move", `,"direction":"sideways"`, 400)
 			mutate("PATCH", "/api/media/1", `,"title":"","description":""`, 200)
+			mutate("PATCH", "/api/media/1", `,"title":"","section":"training"`, 200)
+			if fmt.Sprint(sections("exercise")) != "[4]" {
+				t.Fatal("section edit did not move video")
+			}
+			mutate("PATCH", "/api/media/1", `,"title":"","section":"exercise"`, 200)
+			mutate("PATCH", "/api/media/1", `,"section":"invalid"`, 400)
+			uploaded, e := s.Create(ctx, Item{Section: "exercise", Type: "video", videoFile: strings.Repeat("a", 32) + ".mp4"}, "member", "")
+			if e != nil || uploaded.Section != "exercise" {
+				t.Fatal("uploaded exercise lost section", e)
+			}
+			if _, e = s.Create(ctx, Item{Section: "exercise", Type: "photo"}, "member", randomName()); e == nil {
+				t.Fatal("exercise accepted photo")
+			}
+
 			photo := randomName()
 			os.WriteFile(filepath.Join(dir, "uploads", photo), []byte("test image"), 0600)
 			p, e := s.Create(ctx, Item{Section: "training", Type: "photo"}, "member", photo)
@@ -143,6 +169,7 @@ func TestManagementAndMigration(t *testing.T) {
 				t.Fatal(e)
 			}
 			path := fmt.Sprintf("/api/media/%d", p.ID)
+			mutate("PATCH", path, `,"section":"exercise"`, 400)
 			mutate("DELETE", path, "", 200)
 			if w := request("GET", p.Photo, "", "", ""); w.Code != 404 {
 				t.Fatal("deleted photo still public")

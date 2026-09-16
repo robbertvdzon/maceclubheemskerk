@@ -22,7 +22,7 @@ func Handler(a *auth.Auth, version string, stores ...*content.Store) http.Handle
 	}
 	mux := http.NewServeMux()
 	page := template.Must(template.ParseFS(assets, "static/index.html"))
-	pages := []struct{ Path, Page, Title string }{{"/", "home", "Home"}, {"/fotos-en-filmpjes", "media", "Foto’s en filmpjes"}, {"/wie-zijn-wij", "about", "Wie zijn wij"}, {"/bingo", "bingo", "Lennarts bingo"}}
+	pages := []struct{ Path, Page, Title string }{{"/", "home", "Home"}, {"/oefeningen", "exercises", "Oefeningen"}, {"/fotos-en-filmpjes", "media", "Foto’s en filmpjes"}, {"/wie-zijn-wij", "about", "Wie zijn wij"}, {"/bingo", "bingo", "Lennarts bingo"}}
 	for _, entry := range pages {
 		var html bytes.Buffer
 		if err := page.Execute(&html, struct{ Version, Page, Title string }{version, entry.Page, entry.Title}); err != nil {
@@ -38,7 +38,10 @@ func Handler(a *auth.Auth, version string, stores ...*content.Store) http.Handle
 	}
 	for route, file := range map[string]string{
 		"GET /style.css": "static/style.css", "GET /app.js": "static/app.js",
-		"GET /bingo.js": "static/bingo.js", "GET /lennart-caricature.png": "static/lennart-caricature.png",
+		"GET /stephaan-caricature.png": "static/stephaan-caricature.png",
+		"GET /martijn-caricature.png":  "static/martijn-caricature.png",
+		"GET /robbert-caricature.png":  "static/robbert-caricature.png",
+		"GET /bingo.js":                "static/bingo.js", "GET /lennart-caricature.png": "static/lennart-caricature.png",
 		"GET /video-upload.js": "static/video-upload.js",
 		"GET /monitor.js":      "static/monitor.js", "GET /content.js": "static/content.js",
 		"GET /favicon.svg": "static/favicon.svg", "GET /club-logo.png": "static/club-logo.png",

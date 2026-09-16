@@ -22,7 +22,7 @@
     user = value;
     accountButton.querySelector('span').textContent = user ? (user.name?.split(' ')[0] || 'Mijn account') : 'Inloggen';
     document.querySelectorAll('.member-only').forEach(el => el.hidden = !window.MCH.canEdit);
-    document.querySelector('#account-permission').textContent = window.MCH.canEdit ? 'Je kunt foto’s, filmpjes en de bingo beheren.' : 'Dit account heeft geen beheerrechten.';
+    document.querySelector('#account-permission').textContent = window.MCH.canEdit ? 'Je kunt oefeningen, het clubalbum en de bingo beheren.' : 'Dit account heeft geen beheerrechten.';
     window.dispatchEvent(new CustomEvent('club-auth'));
     if (!user && accountDialog.open) accountDialog.close();
   }
