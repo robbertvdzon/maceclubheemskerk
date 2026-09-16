@@ -4,9 +4,8 @@
  const club=window.MCH;let cells=[],editing=false,busy=false,selected;
  function render(){
   $('#bingo-grid').replaceChildren(...cells.map(cell=>{
-   const button=document.createElement('button');button.className='bingo-cell'+(cell.checked?' crossed':'')+(cell.id===13?' free-cell':'');button.type='button';button.disabled=!club.canEdit||busy;button.setAttribute('aria-pressed',String(cell.checked));button.setAttribute('aria-label',`${cell.text}, ${cell.checked?'doorgestreept':'niet doorgestreept'}${editing?', tekst aanpassen':''}`);
+   const button=document.createElement('button');button.className='bingo-cell'+(cell.checked?' crossed':'');button.type='button';button.disabled=!club.canEdit||busy;button.setAttribute('aria-pressed',String(cell.checked));button.setAttribute('aria-label',`${cell.text}, ${cell.checked?'doorgestreept':'niet doorgestreept'}${editing?', tekst aanpassen':''}`);
    const label=document.createElement('span');label.textContent=cell.text;button.append(label);
-   if(cell.id===13){const star=document.createElement('span');star.className='bingo-star';star.textContent='★';star.setAttribute('aria-hidden','true');button.prepend(star);}
    button.addEventListener('click',()=>{if(editing){selected=cell;$('#bingo-text').value=cell.text;$('#bingo-checked').checked=cell.checked;$('#bingo-error').textContent='';$('#bingo-dialog').showModal();}else save(cell,{checked:!cell.checked});});return button;
   }));
   const rows=Array.from({length:5},(_,r)=>Array.from({length:5},(_,c)=>r*5+c));const cols=Array.from({length:5},(_,c)=>Array.from({length:5},(_,r)=>r*5+c));const lines=[...rows,...cols,[0,6,12,18,24],[4,8,12,16,20]];const wins=lines.filter(line=>line.every(i=>cells[i]?.checked)).length;

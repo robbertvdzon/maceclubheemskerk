@@ -190,7 +190,7 @@ func TestManagementAndMigration(t *testing.T) {
 				return data.Cells
 			}
 			cells := bingo()
-			if len(cells) != 25 || !cells[12].Checked || cells[0].Text != "Te druk" {
+			if len(cells) != 25 || cells[12].Checked || cells[12].Text != "Mijn mace ligt nog in de auto" || cells[0].Text != "Te druk" {
 				t.Fatal("seed missing", cells)
 			}
 			call("PATCH", "/api/bingo/1", `{"text":"Mijn mace slaapt nog","checked":true,"version":1}`, 200)
@@ -220,6 +220,53 @@ func TestManagementAndMigration(t *testing.T) {
 			call("PATCH", "/api/bingo/1", `{"text":"Mijn mace slaapt nog","checked":false,"version":2}`, 200)
 			if bingo()[0].Checked {
 				t.Fatal("unchecking failed")
+			}
+
+			// Upgrade a schema-3 board without touching other cells or custom center text.
+			for _, center := range []struct {
+				text    string
+				checked int
+			}{{"Vrij vak", 1}, {"Vrij vak", 0}, {"Mijn eigen excuus", 1}} {
+				query := "UPDATE bingo_cells SET text=?,checked=?,version=4 WHERE id=13"
+				versionQuery := "PRAGMA user_version=3"
+				if dialect == "postgres" {
+					query = "UPDATE bingo_cells SET text=$1,checked=$2,version=4 WHERE id=13"
+					versionQuery = "UPDATE club_schema SET version=3 WHERE id=1"
+				}
+				if _, err := s.db.Exec(query, center.text, center.checked); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := s.db.Exec(versionQuery); err != nil {
+					t.Fatal(err)
+				}
+				beforeCells, beforeRevision := bingo(), list().Revision
+				if err := migrate(s.db, dialect); err != nil {
+					t.Fatal(err)
+				}
+				want := beforeCells[12]
+				wantRevision := beforeRevision
+				if center.text == "Vrij vak" {
+					want.Text, want.Checked, want.Version = "Mijn mace ligt nog in de auto", false, 5
+					wantRevision++
+				}
+				for i, cell := range bingo() {
+					expected := beforeCells[i]
+					if i == 12 {
+						expected = want
+					}
+					if cell != expected {
+						t.Fatalf("migration changed cell incorrectly: %+v != %+v", cell, expected)
+					}
+				}
+				if list().Revision != wantRevision {
+					t.Fatal("incorrect migration revision")
+				}
+				if err := migrate(s.db, dialect); err != nil {
+					t.Fatal(err)
+				}
+				if bingo()[12] != want || list().Revision != wantRevision {
+					t.Fatal("migration repeated on restart")
+				}
 			}
 		})
 	}

@@ -46,14 +46,19 @@ func migrate(db *sql.DB, dialect string) error {
 		if err = tx.QueryRow("SELECT version FROM club_schema WHERE id=1 FOR UPDATE").Scan(&version); err != nil {
 			return err
 		}
-		if version > 3 {
+		if version > 4 {
 			return errors.New("database schema is newer than this application")
 		}
 		if version < 3 {
 			if err = migratePages(tx, dialect); err != nil {
 				return err
 			}
-			if _, err = tx.Exec("UPDATE club_schema SET version=3 WHERE id=1"); err != nil {
+		}
+		if version < 4 {
+			if err = migrateBingoCenter(tx); err != nil {
+				return err
+			}
+			if _, err = tx.Exec("UPDATE club_schema SET version=4 WHERE id=1"); err != nil {
 				return err
 			}
 		}
@@ -63,7 +68,7 @@ func migrate(db *sql.DB, dialect string) error {
 	if err = tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 3 {
+	if version > 4 {
 		return errors.New("database schema is newer than this application")
 	}
 	if version == 0 {
@@ -89,7 +94,12 @@ func migrate(db *sql.DB, dialect string) error {
 			return err
 		}
 	}
-	if _, err = tx.Exec("PRAGMA user_version=3"); err != nil {
+	if version < 4 {
+		if err = migrateBingoCenter(tx); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec("PRAGMA user_version=4"); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -98,7 +108,7 @@ func migrate(db *sql.DB, dialect string) error {
 var initialBingo = []string{
 	"Te druk", "Slecht geslapen", "File", "Rugpijn", "Knie doet raar",
 	"Gisteren al getraind", "Werkstress", "Familiedingetje", "Niet 100%", "Te laat overleg",
-	"Volgende week zeker", "Telefoon leeg", "Vrij vak", "Vakantie in de planning", "Weer is slecht",
+	"Volgende week zeker", "Telefoon leeg", "Mijn mace ligt nog in de auto", "Vakantie in de planning", "Weer is slecht",
 	"Buikpijn", "Geen energie", "Sportbroek in de was", "Spierpijn", "Druk thuis",
 	"Auto kapot", "Kind ziek", "Slecht weer verwacht", "Verjaardag", "Mijn mace heeft rustdag",
 }
@@ -119,13 +129,25 @@ func migratePages(tx *sql.Tx, dialect string) error {
 		query = "INSERT INTO bingo_cells(id,text,checked) VALUES($1,$2,$3)"
 	}
 	for index, text := range initialBingo {
-		checked := 0
-		if index == 12 {
-			checked = 1
-		}
-		if _, err := tx.Exec(query, index+1, text, checked); err != nil {
+		if _, err := tx.Exec(query, index+1, text, 0); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// Replace only the old free-square label; keep any member-written excuse.
+func migrateBingoCenter(tx *sql.Tx) error {
+	result, err := tx.Exec("UPDATE bingo_cells SET text='Mijn mace ligt nog in de auto', checked=0, version=version+1 WHERE id=13 AND text='Vrij vak'")
+	if err != nil {
+		return err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if changed > 0 {
+		_, err = tx.Exec("UPDATE content_state SET revision=revision+1 WHERE id=1")
+	}
+	return err
 }
