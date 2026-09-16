@@ -1,6 +1,6 @@
 # Mace Club Heemskerk
 
-Go-website met Google-login, een SQLite-videobibliotheek en trainingsfoto’s. Geen JavaScript-build of lokale Go-installatie nodig. Docker compileert de Go-code; de runtime bevat de binary, CA-certificaten en persistente data onder `/data`.
+Go-website met Google-login, een mediabibliotheek in PostgreSQL (productie) of SQLite (lokaal) en trainingsfoto’s. Geen JavaScript-build of lokale Go-installatie nodig. Docker compileert de Go-code; de runtime bevat de binary, CA-certificaten en persistente data onder `/data`.
 
 ## Lokaal starten
 
@@ -51,7 +51,7 @@ De smoketest gebruikt een eigen tijdelijke container met een willekeurige UID, a
 - `GET /healthz`: status voor OpenShift-probes.
 - `PORT`: luisterpoort, standaard `8080`.
 
-`internal/content` gebruikt `database/sql` en de pure-Go `modernc.org/sqlite`-driver. `SQLITE_FILE` is standaard `/data/maceclub.sqlite`. Foto’s staan in de map `uploads` naast de database. De bestaande sessies blijven in `/data/sessions.json`; deze update maakt bestaande sessies niet ongeldig.
+`internal/content` gebruikt `database/sql`: pgx voor PostgreSQL in productie en de pure-Go `modernc.org/sqlite`-driver voor lokaal gebruik. `SQLITE_FILE` is standaard `/data/maceclub.sqlite`; `DATABASE_URL` selecteert PostgreSQL. Foto’s staan in `/data/uploads` (bij SQLite naast het databasebestand). De bestaande sessies blijven in `/data/sessions.json`; deze update maakt bestaande sessies niet ongeldig.
 
 ## Deployment naar OpenShift
 
@@ -98,7 +98,7 @@ cp -n secrets.example.env secrets.env
 chmod 600 secrets.env
 ```
 
-SQLite heeft geen databasewachtwoord nodig. `DATABASE_URL`, `DATABASE_USER` en `DATABASE_PASSWORD` blijven ongebruikte reserveringen voor een eventuele externe database. `GOOGLE_CLIENT_ID` configureert login; `MEMBER_EMAILS` bevat de komma-gescheiden Google-adressen van leden die content mogen toevoegen. Leeg betekent dat niemand mag toevoegen. Voeg toekomstige leden handmatig aan deze lijst toe; er is geen openbare registratie.
+`DATABASE_URL` selecteert PostgreSQL wanneer gevuld met een PostgreSQL-URL. Zonder die instelling gebruikt de app `SQLITE_FILE`, zonder databasewachtwoord. Productie gebruikt PostgreSQL; de CA en URL komen uit de deploymentconfiguratie en secrets. `GOOGLE_CLIENT_ID` configureert login; `MEMBER_EMAILS` bevat de komma-gescheiden Google-adressen van leden die content mogen toevoegen. Leeg betekent dat niemand mag toevoegen. Voeg toekomstige leden handmatig aan deze lijst toe; er is geen openbare registratie.
 
 Zodra er echte waarden zijn ingevuld:
 
@@ -114,7 +114,7 @@ Het script gebruikt `python3`, `kubeseal` en het publieke clustercertificaat uit
 - Het script schrijft `deploy/secrets/sealed-secret.json` en registreert dit in de bijbehorende Kustomization. Commit deze versleutelde bestanden; nooit `secrets.env`.
 - De versleuteling is gebonden aan namespace `maceclubheemskerk` en Secret `maceclubheemskerk-secrets`; kopieer dit niet naar een andere omgeving.
 - Argo CD synchroniseert het SealedSecret; de bestaande controller maakt het Secret. De Deployment leest dit via een optionele `envFrom`-referentie. De bestaande Reloader zorgt voor herstart bij secretwijzigingen.
-- De lokale Compose-service leest `secrets.env` als ruwe waarden (geen shell- of dollar-expansie). De gereserveerde externe databasekeys worden niet gebruikt door SQLite.
+- De lokale Compose-service leest `secrets.env` als ruwe waarden (geen shell- of dollar-expansie). De database-URL wordt alleen gebruikt wanneer PostgreSQL is ingesteld.
 
 ### Terugrollen
 
@@ -157,23 +157,31 @@ De fingerprint in `/api/version` is de SHA-256 van de daadwerkelijk draaiende Go
 
 De sessiecookie en de PVC blijven bestaan bij herladen en deployen. Een tab die nog de oude versie van vóór deze monitor bevat, moet één keer handmatig worden vernieuwd om de monitor te laden. Het toevoegformulier houdt invoer vast bij validatiefouten en onderbrekingen; na een geslaagde opslag vernieuwt de bibliotheek direct.
 
-## Video’s, foto’s en persistente SQLite-opslag
+## Losse pagina’s, media en bingo
+
+- `/`: homepage; `/fotos-en-filmpjes`: één lijst; `/wie-zijn-wij`: leden; `/bingo`: Lennarts excuses-bingo. Alle pagina’s zijn openbaar.
+- Alleen leden uit `MEMBER_EMAILS` zien beheerknoppen. Titel en beschrijving zijn optioneel bij alle uploads. Er zijn geen categorieën meer.
+- `PATCH /api/media/{id}` bewerkt tekst; `POST .../move` verplaatst omhoog/omlaag; `DELETE` verplaatst naar de prullenbak; `POST .../restore` herstelt. Mutaties vereisen de actuele `revision`; conflicten geven 409. Bestanden blijven bewaard, maar verwijderde media zijn niet openbaar opvraagbaar. `GET /api/media/trash` is alleen voor leden.
+- `GET /api/bingo` is openbaar; `PATCH /api/bingo/{id}` is voor leden en bewaart `text`, `checked` en de verwachte `version`. De 25 startvakjes worden één keer ingevoegd; latere deploys bewaren de aanpassingen.
+
+### Uploads en opslag
 
 - `GET /api/media`: openbare bibliotheek en revisie; Google-subjecten en e-mailadressen van auteurs worden niet teruggegeven.
 - `POST /api/media`: alleen een geldige sessie, toegestane Origin én een account in `MEMBER_EMAILS`.
-- Video: JSON met `section` (`exercise`/`training`), `title`, `description`, `category` (`Basis`, `Techniek`, `Flow`, alleen voor oefeningen) en `url`. Alleen herkende YouTube-links worden opgeslagen als video-ID; de server haalt geen willekeurige URL op.
+- Video: JSON met `section` (`exercise`/`training`), `title`, `description`, `category` (oud veld, wordt genegeerd) en `url`. Alleen herkende YouTube-links worden opgeslagen als video-ID; de server haalt geen willekeurige URL op.
 - Eigen video: `POST /api/videos`, multipart met `section`, `title`, `description`, `category` en bestand `video`. Dezelfde sessie-, Origin- en ledencontrole. Dit oudere endpoint accepteert nog maximaal 90.000.000 bytes, MP4/H.264. De browser gebruikt het nieuwe uploadprotocol hieronder. De Go-backend inspecteert begrensde MP4-metadata en streamt naar een tijdelijk bestand; pas na validatie verschijnt het in de bibliotheek. De browser toont voortgang en kan annuleren. Bestanden zijn openbaar via `/videos/{willekeurige-naam}.mp4`, met ondersteuning voor byte ranges en doorspoelen.
 - Grote telefoonvideo’s: `POST /api/video-uploads` met titel, sectie, bestandsnaam, grootte en willekeurige `Upload-ID` start een upload. `PUT /api/video-uploads/{id}` verstuurt delen van maximaal 8 MiB met `Upload-Offset`. Een herhaald deel wordt op inhoud vergeleken; dubbele bevestigingen voegen geen bytes of records toe. `POST .../complete` start verwerking; `GET .../{id}` geeft de status; `DELETE .../{id}` annuleert. Elk endpoint controleert de sessie en clubrechten, wijzigingen controleren daarnaast Origin; uploads zijn aan de maker gebonden.
 - Maximaal 1 GB invoer, MP4 of MOV, maximaal 30 minuten en 4096 pixels per as. FFmpeg zet de video automatisch om naar H.264/AAC (maximaal 1080p/30 fps); HEVC en HDR-telefoonvideo’s worden ondersteund. HDR wordt naar SDR omgezet. De originele upload en camerametadata worden na verwerking verwijderd; alleen de webversie wordt gepubliceerd en geback-upt. De Go-backend roept FFmpeg zonder shell aan; MOV-demuxer, lokale protocollen, geen externe datareferenties, begrensde threads, uitvoergrootte en verwerkingstijd.
 - Eén video tegelijk uploaden/verwerken. De browser probeert kort onderbroken verzoeken opnieuw, bewaart de bestandskeuze bij fouten en toont upload- en verwerkingsstatus. Houd de pagina tijdens het uploaden open. Een procesherstart vereist opnieuw uploaden; inactieve uploads verlopen na 15 minuten. Conversie duurt maximaal 30 minuten en blijft na het sluiten van de pagina doorlopen. Er is ruimte nodig voor invoer plus maximaal 1 GB uitvoer; dat wordt vooraf gecontroleerd. De pod heeft maximaal twee CPU-cores en 1 GiB geheugen.
 - Foto: multipart met `section=training`, `title`, `description`, bestand `photo`. Maximaal 10 MB en 16 megapixels; JPG, PNG of WebP. De backend controleert de echte inhoud, corrigeert JPEG-cameraoriëntatie, verkleint tot maximaal 2048 pixels en schrijft een nieuwe JPEG zonder originele metadata.
 - YouTube-thumbnails komen van YouTube. De speler wordt pas na aanklikken via `youtube-nocookie.com` geladen. Geüploade foto’s zijn openbaar zichtbaar, zoals de rest van de homepage.
-- Database en foto’s delen de bestaande PVC `maceclubheemskerk-sessions-local`. Eén replica, `Recreate`, SQLite WAL en transacties. Geen voorbeeldcontent wordt ingeladen. Er is een bovengrens van 10.000 items; uploads worden één voor één verwerkt om geheugenverbruik te begrenzen.
-- Video’s staan op een afzonderlijke 10 GiB PVC `maceclubheemskerk-videos`, gemount op `/videos` via `VIDEO_DIR`. Lokaal gebruikt Compose een apart volume. Het appbudget is 9 GiB, met een extra controle op vrije schijfruimte. De `local-path` storageclass reserveert niet fysiek 10 GiB op de node; bewaak ook de nodecapaciteit. Eén gelijktijdige videoupload, maximaal tien minuten; de bestaande database, foto’s en sessies behouden hun volume.
-- Schema 2 migreert automatisch en transactioneel vanuit schema 1 met behoud van bestaande inhoud, IDs en revisie. Terugrollen naar een oude binary vereist herstel van een vooraf gemaakte schema-1-back-up; oudere binaries kennen het videoveld niet.
-- Momenteel kan de club content toevoegen en bekijken. Bewerken/verwijderen is nog geen gebruikersfunctie.
+- Productie gebruikt PostgreSQL voor media en bingo. Foto’s en sessies blijven op PVC `maceclubheemskerk-sessions-local`. Lokaal kan ook SQLite op dit volume staan (WAL en transacties). Eén replica en `Recreate` vanwege de bestanden. Er wordt geen voorbeeldmedia ingeladen. Er is een bovengrens van 10.000 items; uploads worden één voor één verwerkt om geheugenverbruik te begrenzen.
+- Video’s staan op een afzonderlijke 10 GiB PVC `maceclubheemskerk-videos`, gemount op `/videos` via `VIDEO_DIR`. Lokaal gebruikt Compose een apart volume. Het appbudget is 9 GiB, met een extra controle op vrije schijfruimte. De `local-path` storageclass reserveert niet fysiek 10 GiB op de node; bewaak ook de nodecapaciteit. Eén gelijktijdige videoupload; de bestaande database, foto’s en sessies behouden hun volume.
+- Schema 3 migreert transactioneel met behoud van bestaande inhoud, IDs, bestanden en revisie. Het voegt volgorde, prullenbak en bingo toe. Test SQLite én PostgreSQL met `sh tests/postgres.sh` (tijdelijke database, geen productiecredentials). Oudere binaries ondersteunen deze beheerfuncties niet; gebruik een schemacompatibele versie bij terugrollen.
 
-### Consistente back-up en herstel
+### Consistente back-up en herstel (SQLite)
+
+Onderstaande opdracht is uitsluitend voor SQLite. Productie gebruikt PostgreSQL en vereist een PostgreSQL-back-up (bijvoorbeeld `pg_dump`) plus de foto- en videobestanden op de PVC’s. Het SQLite-back-upcommando werkt niet op PostgreSQL.
 
 De Go-binary heeft een back-upcommando. Het maakt via `VACUUM INTO` een consistente databasekopie plus alle daarin genoemde foto’s en video’s in één zipbestand. Het overschrijft geen bestaande back-up. Lokaal:
 
@@ -182,7 +190,7 @@ docker compose exec web /server backup /videos/club-backup.zip
 docker compose cp web:/videos/club-backup.zip ./club-backup.zip
 ```
 
-In OpenShift kan hetzelfde commando via `oc exec` worden gestart. De Alpine-runtime bevat FFmpeg en `tar`; een zip kan via `oc cp` naar externe opslag worden gekopieerd. Back-ups zijn handmatig; er is geen externe back-upbestemming geconfigureerd. Een back-up op dezelfde PVC beschermt niet tegen verlies van de node. Zorg vóór het back-uppen voor genoeg extra ruimte voor de hele bibliotheek; kopieer de zip daarna naar externe opslag.
+Alleen bij een SQLite-installatie kan hetzelfde commando via `oc exec` worden gestart. De Alpine-runtime bevat FFmpeg en `tar`; een zip kan via `oc cp` naar externe opslag worden gekopieerd. Back-ups zijn handmatig; er is geen externe back-upbestemming geconfigureerd. Een back-up op dezelfde PVC beschermt niet tegen verlies van de node. Zorg vóór het back-uppen voor genoeg extra ruimte voor de hele bibliotheek; kopieer de zip daarna naar externe opslag.
 
 Herstellen: stop de applicatie, bewaar de huidige `/data` en `/videos` apart, pak de zip uit naar een lege datamap (database en `uploads/` samen), zet de uitgepakte `videos/`-inhoud op de aparte `VIDEO_DIR`-mount, herstel passende eigenaar/rechten en start de app. Leg geen oude `-wal`/`-shm` naast een herstelde database. Sessies worden niet in de contentback-up opgenomen; behoud het bestaande `sessions.json` apart voor blijvende logins. Kopieer nooit alleen een actief SQLite-hoofdbestand voor een back-up.
 

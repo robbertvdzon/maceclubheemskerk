@@ -24,6 +24,8 @@ jobs:
         run: docker compose run --build --rm tools go vet ./...
       - name: Test Go authentication and sessions
         run: docker compose run --rm tools go test ./...
+      - name: Test PostgreSQL migration and content management
+        run: sh tests/postgres.sh
       - name: Test browser version monitor
         run: node --test tests/*.test.cjs
       - name: Test secrets tooling

@@ -161,8 +161,8 @@ func TestHTTPAuthorizationValidationAndUpload(t *testing.T) {
 	if w := request("POST", "/api/media", body, member, "https://club.test", "application/json"); w.Code != 201 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	if w := request("POST", "/api/media", strings.Replace(body, "360 swing", "", 1), member, "https://club.test", "application/json"); w.Code != 400 {
-		t.Fatal("accepted empty title")
+	if w := request("POST", "/api/media", strings.Replace(body, "360 swing", strings.Repeat("x", 101), 1), member, "https://club.test", "application/json"); w.Code != 400 {
+		t.Fatal("accepted oversized title")
 	}
 	makeUpload := func(contents []byte) (string, string) {
 		var b bytes.Buffer

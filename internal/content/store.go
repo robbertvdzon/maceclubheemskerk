@@ -160,7 +160,11 @@ func (s *Store) Revision(ctx context.Context) (int64, error) {
 }
 func (s *Store) List(ctx context.Context) (Library, error) {
 	out := Library{Items: []Item{}}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	opts := &sql.TxOptions{ReadOnly: true}
+	if s.dialect == "postgres" {
+		opts.Isolation = sql.LevelRepeatableRead
+	}
+	tx, err := s.db.BeginTx(ctx, opts)
 	if err != nil {
 		return out, err
 	}
@@ -168,7 +172,7 @@ func (s *Store) List(ctx context.Context) (Library, error) {
 	if err = tx.QueryRowContext(ctx, "SELECT revision FROM content_state WHERE id=1").Scan(&out.Revision); err != nil {
 		return out, err
 	}
-	rows, err := tx.QueryContext(ctx, "SELECT id,section,kind,title,description,category,youtube_id,photo_file,created_at,video_file FROM media ORDER BY id DESC")
+	rows, err := tx.QueryContext(ctx, "SELECT id,section,kind,title,description,category,youtube_id,photo_file,created_at,video_file FROM media WHERE deleted_at='' ORDER BY sort_order,id DESC")
 	if err != nil {
 		return out, err
 	}
@@ -224,8 +228,8 @@ func YouTubeID(raw string) (string, error) {
 func Validate(i *Item) error {
 	i.Title = strings.TrimSpace(i.Title)
 	i.Description = strings.TrimSpace(i.Description)
-	if !utf8.ValidString(i.Title) || !utf8.ValidString(i.Description) || i.Title == "" || utf8.RuneCountInString(i.Title) > 100 || utf8.RuneCountInString(i.Description) > 500 {
-		return errors.New("Vul een titel in van maximaal 100 tekens en een beschrijving van maximaal 500 tekens.")
+	if !utf8.ValidString(i.Title) || !utf8.ValidString(i.Description) || utf8.RuneCountInString(i.Title) > 100 || utf8.RuneCountInString(i.Description) > 500 {
+		return errors.New("Gebruik maximaal 100 tekens voor de titel en 500 voor de beschrijving.")
 	}
 	if i.Section != "exercise" && i.Section != "training" {
 		return errors.New("Kies oefeningen of trainingen.")
@@ -233,16 +237,8 @@ func Validate(i *Item) error {
 	if i.Type != "video" && i.Type != "photo" {
 		return errors.New("Kies een video of foto.")
 	}
-	if i.Section == "exercise" {
-		if i.Type != "video" {
-			return errors.New("Voeg een oefening toe als video.")
-		}
-		if i.Category != "Basis" && i.Category != "Techniek" && i.Category != "Flow" {
-			return errors.New("Kies een geldige categorie.")
-		}
-	} else {
-		i.Category = ""
-	}
+	i.Section = "training"
+	i.Category = ""
 	if i.Type == "video" && !youtubePattern.MatchString(i.YouTube) && !videoPattern.MatchString(i.videoFile) {
 		return errors.New("Ongeldige video.")
 	}
@@ -263,6 +259,13 @@ func (s *Store) Create(ctx context.Context, i Item, author, file string) (Item, 
 		return i, err
 	}
 	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, "UPDATE content_state SET revision=revision+1 WHERE id=1"); err != nil {
+		return i, err
+	}
+	var position int64
+	if err = tx.QueryRowContext(ctx, "SELECT COALESCE(MIN(sort_order),0)-1 FROM media").Scan(&position); err != nil {
+		return i, err
+	}
 	var count int
 	if err = tx.QueryRowContext(ctx, "SELECT count(*) FROM media").Scan(&count); err != nil {
 		return i, err
@@ -272,9 +275,9 @@ func (s *Store) Create(ctx context.Context, i Item, author, file string) (Item, 
 	}
 	i.CreatedAt = time.Now().UTC().Format(time.RFC3339)
 	if s.dialect == "postgres" {
-		err = tx.QueryRowContext(ctx, s.bind(`INSERT INTO media(section,kind,title,description,category,youtube_id,photo_file,created_by,created_at,video_file) VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id`), i.Section, i.Type, i.Title, i.Description, i.Category, i.YouTube, file, author, i.CreatedAt, i.videoFile).Scan(&i.ID)
+		err = tx.QueryRowContext(ctx, s.bind(`INSERT INTO media(section,kind,title,description,category,youtube_id,photo_file,created_by,created_at,video_file,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?,?) RETURNING id`), i.Section, i.Type, i.Title, i.Description, i.Category, i.YouTube, file, author, i.CreatedAt, i.videoFile, position).Scan(&i.ID)
 	} else {
-		res, execErr := tx.ExecContext(ctx, `INSERT INTO media(section,kind,title,description,category,youtube_id,photo_file,created_by,created_at,video_file) VALUES(?,?,?,?,?,?,?,?,?,?)`, i.Section, i.Type, i.Title, i.Description, i.Category, i.YouTube, file, author, i.CreatedAt, i.videoFile)
+		res, execErr := tx.ExecContext(ctx, `INSERT INTO media(section,kind,title,description,category,youtube_id,photo_file,created_by,created_at,video_file,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, i.Section, i.Type, i.Title, i.Description, i.Category, i.YouTube, file, author, i.CreatedAt, i.videoFile, position)
 		if execErr == nil {
 			i.ID, execErr = res.LastInsertId()
 		}
@@ -284,9 +287,6 @@ func (s *Store) Create(ctx context.Context, i Item, author, file string) (Item, 
 		return i, err
 	}
 
-	if _, err = tx.ExecContext(ctx, "UPDATE content_state SET revision=revision+1 WHERE id=1"); err != nil {
-		return i, err
-	}
 	if err = tx.Commit(); err != nil {
 		return i, err
 	}

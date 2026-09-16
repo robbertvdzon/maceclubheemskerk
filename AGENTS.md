@@ -3,7 +3,7 @@
 - De backend is volledig Go. Google ID-tokens worden geverifieerd met de officiële Google Go-library; overige logica gebruikt de standaardbibliotheek.
 - Bouw en controleer via Docker Compose; een lokale Go-installatie is niet nodig.
 - De website draait uiteindelijk op Robberts OpenShift-cluster achter de bestaande Cloudflare Tunnel.
-- Content staat in SQLite via de pure-Go modernc-driver. Database en foto’s staan op de bestaande PVC; er is geen externe SQL-server nodig. Versieer toekomstige schemamigraties expliciet.
+- Productiecontent staat in PostgreSQL via pgx; SQLite (modernc) blijft beschikbaar voor lokaal ontwikkelen en tests. Foto’s en sessies staan op de bestaande PVC. Versieer schemamigraties expliciet en test beide databasevarianten.
 - Houd HTTP-afhandeling in `internal/web` en procesconfiguratie in `cmd/server`.
 - HTML en CSS worden in de Go-binary opgenomen met `go:embed`.
 - Voeg geen verzonnen trainingstijden, contactgegevens of clubinformatie toe.
@@ -15,9 +15,11 @@
 - Alle account-API's moeten server-side RequireUser gebruiken; authenticatie alleen geeft geen beheerdersrechten. Geen productie-testlogin of auth-bypass toevoegen.
 - HTML, assets en API's mogen niet gecachet worden. Houd de versiecontrole en automatisch herladen met behoud van de sessie in stand.
 
-- Alleen accounts uit `MEMBER_EMAILS` mogen content toevoegen. Een lege lijst weigert alle schrijfacties; login alleen is nooit voldoende. Geen openbare registratie of aanmeldformulier.
+- Alleen accounts uit `MEMBER_EMAILS` mogen content toevoegen, bewerken, verplaatsen, verwijderen, herstellen en bingo aanpassen. Een lege lijst weigert alle schrijfacties; login alleen is nooit voldoende. Geen openbare registratie of aanmeldformulier.
 - SQLite staat standaard in `/data/maceclub.sqlite`, foto’s in `/data/uploads`. Bewaar `/data/sessions.json` bij wijzigingen zodat bestaande logins geldig blijven.
 - Het goedgekeurde ontwerp staat in `design/`; de echte website staat in `internal/web/static`. Voorbeeldcontent en gesimuleerde login mogen niet naar de live frontend worden gekopieerd.
 - Uploads zijn begrensd, worden als afbeelding gedecodeerd en opnieuw gecodeerd. Bewaar willekeurige bestandsnamen. Tijdens een open formulier of videospeler geen automatische paginareload.
 
 - Eigen video’s: MP4/MOV maximaal 1 GB, delen van 8 MiB naar aparte `VIDEO_DIR` PVC; geen hele video in RAM. De Go-backend gebruikt FFmpeg voor begrensde H.264/AAC-conversie (door Robbert goedgekeurd). Preserveer byte ranges en schema-2-migratie. Foto-normalisatie geldt alleen voor foto’s.
+
+- Schema 3 voegt mediavolgorde, prullenbak en bingo toe. Verwijderen is herstelbaar: behoud bestanden, maar blokkeer openbare media-URLs zolang een item verwijderd is. Bewaar bestaande media, sessies en bingo-aanpassingen bij deploys.

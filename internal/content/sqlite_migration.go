@@ -63,7 +63,7 @@ func MigrateSQLite(ctx context.Context, sourceFile, databaseURL string) (int, in
 		if err = rows.Scan(&id, &section, &kind, &title, &description, &category, &youtube, &photo, &author, &createdAt, &video); err != nil {
 			return 0, 0, err
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO media(id,section,kind,title,description,category,youtube_id,photo_file,created_by,created_at,video_file) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, id, section, kind, title, description, category, youtube, photo, author, createdAt, video); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO media(id,section,kind,title,description,category,youtube_id,photo_file,created_by,created_at,video_file,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, id, section, kind, title, description, category, youtube, photo, author, createdAt, video, -id); err != nil {
 			return 0, 0, err
 		}
 		count++

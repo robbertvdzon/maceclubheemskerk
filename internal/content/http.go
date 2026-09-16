@@ -52,6 +52,7 @@ func (s *Store) Register(mux *http.ServeMux, a *auth.Auth) {
 	}))
 	mux.HandleFunc("GET /media/{file}", s.photo)
 	s.registerVideos(mux, a)
+	s.registerManagement(mux, a)
 }
 func (s *Store) create(w http.ResponseWriter, r *http.Request, u auth.User) {
 	// Bound decoded-image memory and concurrent uploads before reading the request.
@@ -226,7 +227,7 @@ func (s *Store) photo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var exists int
-	if err := s.db.QueryRowContext(r.Context(), s.bind("SELECT 1 FROM media WHERE photo_file=?"), name).Scan(&exists); err != nil {
+	if err := s.db.QueryRowContext(r.Context(), s.bind("SELECT 1 FROM media WHERE photo_file=? AND deleted_at=''"), name).Scan(&exists); err != nil {
 		http.NotFound(w, r)
 		return
 	}

@@ -39,13 +39,31 @@ func migrate(db *sql.DB, dialect string) error {
 		if _, err = tx.Exec(`CREATE TABLE IF NOT EXISTS content_state (id INTEGER PRIMARY KEY CHECK(id=1), revision BIGINT NOT NULL); INSERT INTO content_state(id,revision) VALUES(1,0) ON CONFLICT (id) DO NOTHING;`); err != nil {
 			return err
 		}
+		if _, err = tx.Exec(`CREATE TABLE IF NOT EXISTS club_schema (id INTEGER PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL); INSERT INTO club_schema VALUES(1,2) ON CONFLICT(id) DO NOTHING;`); err != nil {
+			return err
+		}
+		var version int
+		if err = tx.QueryRow("SELECT version FROM club_schema WHERE id=1 FOR UPDATE").Scan(&version); err != nil {
+			return err
+		}
+		if version > 3 {
+			return errors.New("database schema is newer than this application")
+		}
+		if version < 3 {
+			if err = migratePages(tx, dialect); err != nil {
+				return err
+			}
+			if _, err = tx.Exec("UPDATE club_schema SET version=3 WHERE id=1"); err != nil {
+				return err
+			}
+		}
 		return tx.Commit()
 	}
 	var version int
 	if err = tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 2 {
+	if version > 3 {
 		return errors.New("database schema is newer than this application")
 	}
 	if version == 0 {
@@ -63,8 +81,51 @@ func migrate(db *sql.DB, dialect string) error {
 			return err
 		}
 	}
-	if _, err = tx.Exec(`CREATE TABLE IF NOT EXISTS content_state (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL); INSERT OR IGNORE INTO content_state VALUES(1,0); PRAGMA user_version=2;`); err != nil {
+	if _, err = tx.Exec(`CREATE TABLE IF NOT EXISTS content_state (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL); INSERT OR IGNORE INTO content_state VALUES(1,0); `); err != nil {
+		return err
+	}
+	if version < 3 {
+		if err = migratePages(tx, dialect); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec("PRAGMA user_version=3"); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+var initialBingo = []string{
+	"Te druk", "Slecht geslapen", "File", "Rugpijn", "Knie doet raar",
+	"Gisteren al getraind", "Werkstress", "Familiedingetje", "Niet 100%", "Te laat overleg",
+	"Volgende week zeker", "Telefoon leeg", "Vrij vak", "Vakantie in de planning", "Weer is slecht",
+	"Buikpijn", "Geen energie", "Sportbroek in de was", "Spierpijn", "Druk thuis",
+	"Auto kapot", "Kind ziek", "Slecht weer verwacht", "Verjaardag", "Mijn mace heeft rustdag",
+}
+
+func migratePages(tx *sql.Tx, dialect string) error {
+	for _, statement := range []string{
+		"ALTER TABLE media ADD COLUMN sort_order BIGINT NOT NULL DEFAULT 0",
+		"ALTER TABLE media ADD COLUMN deleted_at TEXT NOT NULL DEFAULT ''",
+		"UPDATE media SET sort_order=-id",
+		"CREATE TABLE bingo_cells (id INTEGER PRIMARY KEY CHECK(id BETWEEN 1 AND 25), text TEXT NOT NULL, checked INTEGER NOT NULL DEFAULT 0 CHECK(checked IN (0,1)), version INTEGER NOT NULL DEFAULT 1)",
+	} {
+		if _, err := tx.Exec(statement); err != nil {
+			return err
+		}
+	}
+	query := "INSERT INTO bingo_cells(id,text,checked) VALUES(?,?,?)"
+	if dialect == "postgres" {
+		query = "INSERT INTO bingo_cells(id,text,checked) VALUES($1,$2,$3)"
+	}
+	for index, text := range initialBingo {
+		checked := 0
+		if index == 12 {
+			checked = 1
+		}
+		if _, err := tx.Exec(query, index+1, text, checked); err != nil {
+			return err
+		}
+	}
+	return nil
 }
