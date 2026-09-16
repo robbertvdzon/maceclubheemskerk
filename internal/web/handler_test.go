@@ -10,7 +10,7 @@ import (
 func TestPublicPageCacheHeadersVersionAndProtectedAccount(t *testing.T) {
 	version := strings.Repeat("a", 64)
 	h := Handler(auth.New(auth.Config{}, nil, nil), version)
-	for _, path := range []string{"/", "/style.css", "/app.js", "/api/version", "/api/auth/me", "/healthz"} {
+	for _, path := range []string{"/", "/style.css", "/app.js", "/video-edit.js", "/video-times.js", "/api/version", "/api/auth/me", "/healthz"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 		if w.Code != 200 {

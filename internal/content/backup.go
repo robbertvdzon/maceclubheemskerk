@@ -12,6 +12,8 @@ import (
 // Backup produces a consistent SQLite snapshot and the immutable photos it references.
 // New additions during the backup are included only if present in the SQLite snapshot.
 func (s *Store) Backup(ctx context.Context, destination string) error {
+	s.assetMu.Lock()
+	defer s.assetMu.Unlock()
 	dir, err := os.MkdirTemp(s.dir, ".backup-")
 	if err != nil {
 		return err
@@ -26,19 +28,24 @@ func (s *Store) Backup(ctx context.Context, destination string) error {
 		return err
 	}
 	defer db.Close()
-	rows, err := db.QueryContext(ctx, "SELECT photo_file,video_file FROM media WHERE photo_file<>'' OR video_file<>''")
+	rows, err := db.QueryContext(ctx, "SELECT photo_file,video_file,COALESCE(p.render_file,''),COALESCE(p.thumbnail_file,'') FROM media m LEFT JOIN media_playback p ON p.media_id=m.id WHERE photo_file<>'' OR video_file<>''")
 	if err != nil {
 		return err
 	}
 	files := [][2]string{}
 	for rows.Next() {
-		var photo, video string
-		if err = rows.Scan(&photo, &video); err != nil {
+		var photo, video, render, thumb string
+		if err = rows.Scan(&photo, &video, &render, &thumb); err != nil {
 			rows.Close()
 			return err
 		}
 		if photo != "" {
 			files = append(files, [2]string{"uploads/" + photo, filepath.Join(s.dir, "uploads", photo)})
+		}
+		for _, name := range []string{render, thumb} {
+			if name != "" {
+				files = append(files, [2]string{"videos/" + name, filepath.Join(s.videoDir, name)})
+			}
 		}
 		if video != "" {
 			files = append(files, [2]string{"videos/" + video, filepath.Join(s.videoDir, video)})

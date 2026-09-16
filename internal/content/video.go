@@ -234,7 +234,7 @@ func (s *Store) video(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var exists int
-	if err := s.db.QueryRowContext(r.Context(), s.bind("SELECT 1 FROM media WHERE video_file=? AND deleted_at=''"), name).Scan(&exists); err != nil {
+	if err := s.db.QueryRowContext(r.Context(), s.bind("SELECT 1 FROM media m LEFT JOIN media_playback p ON p.media_id=m.id WHERE CASE WHEN COALESCE(p.render_file,'')<>'' THEN p.render_file ELSE m.video_file END=? AND m.deleted_at=''"), name).Scan(&exists); err != nil {
 		http.NotFound(w, r)
 		return
 	}

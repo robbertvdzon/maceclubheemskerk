@@ -91,7 +91,7 @@ func TestManagementAndMigration(t *testing.T) {
 				mux.ServeHTTP(w, r)
 				return w
 			}
-			for _, route := range []struct{ method, path string }{{"PATCH", "/api/media/1"}, {"DELETE", "/api/media/1"}, {"POST", "/api/media/1/move"}, {"POST", "/api/media/1/restore"}, {"PATCH", "/api/bingo/1"}, {"GET", "/api/media/trash"}, {"POST", "/api/playlists"}, {"DELETE", "/api/playlists/4zbpTuVArXmyTCdaBXOudH"}} {
+			for _, route := range []struct{ method, path string }{{"PATCH", "/api/media/1"}, {"DELETE", "/api/media/1"}, {"POST", "/api/media/1/move"}, {"POST", "/api/media/1/restore"}, {"PATCH", "/api/bingo/1"}, {"GET", "/api/media/trash"}, {"GET", "/api/media/1/source"}, {"GET", "/api/media/1/editing"}, {"GET", "/api/media/1/clip"}, {"POST", "/api/media/1/clip"}, {"PATCH", "/api/media/1/youtube"}, {"POST", "/api/playlists"}, {"DELETE", "/api/playlists/4zbpTuVArXmyTCdaBXOudH"}} {
 				for _, who := range []struct {
 					token string
 					want  int
@@ -154,6 +154,7 @@ func TestManagementAndMigration(t *testing.T) {
 			}
 			mutate("PATCH", "/api/media/1", `,"title":"","section":"exercise"`, 200)
 			mutate("PATCH", "/api/media/1", `,"section":"invalid"`, 400)
+			os.WriteFile(filepath.Join(s.videoDir, strings.Repeat("a", 32)+".mp4"), []byte("existing test asset"), 0600)
 			uploaded, e := s.Create(ctx, Item{Section: "exercise", Type: "video", videoFile: strings.Repeat("a", 32) + ".mp4"}, "member", "")
 			if e != nil || uploaded.Section != "exercise" {
 				t.Fatal("uploaded exercise lost section", e)
@@ -271,6 +272,8 @@ func TestManagementAndMigration(t *testing.T) {
 			if got := playlists(); len(got) != 1 || got[0].ID != "abcdefghijklmnopqrstuv" {
 				t.Fatal("playlist state lost on restart", got)
 			}
+
+			testPlaybackManagement(t, s, call, list)
 
 			// Upgrade a schema-3 board without touching other cells or custom center text.
 			for _, center := range []struct {

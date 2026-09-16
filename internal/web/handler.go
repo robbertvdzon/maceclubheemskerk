@@ -37,8 +37,10 @@ func Handler(a *auth.Auth, version string, stores ...*content.Store) http.Handle
 		})
 	}
 	for route, file := range map[string]string{
-		"GET /playlists.js": "static/playlists.js",
-		"GET /style.css":    "static/style.css", "GET /app.js": "static/app.js",
+		"GET /video-edit.js":  "static/video-edit.js",
+		"GET /video-times.js": "static/video-times.js",
+		"GET /playlists.js":   "static/playlists.js",
+		"GET /style.css":      "static/style.css", "GET /app.js": "static/app.js",
 		"GET /robbert-approved.webp":   "static/robbert-approved.webp",
 		"GET /steve-approved.webp":     "static/steve-approved.webp",
 		"GET /club-approved.webp":      "static/club-approved.webp",

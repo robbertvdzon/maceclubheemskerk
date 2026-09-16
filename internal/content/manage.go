@@ -64,6 +64,12 @@ func (s *Store) registerManagement(mux *http.ServeMux, a *auth.Auth) {
 		}
 		send(w, 200, map[string]any{"items": items})
 	}))
+	mux.HandleFunc("GET /api/media/{id}/editing", member(s.editing))
+	mux.HandleFunc("GET /api/media/{id}/source", member(s.sourceVideo))
+	mux.HandleFunc("GET /api/media/{id}/clip", member(s.clipStatus))
+	mux.HandleFunc("POST /api/media/{id}/clip", member(s.startClip))
+	mux.HandleFunc("PATCH /api/media/{id}/youtube", member(s.saveYouTube))
+	mux.HandleFunc("GET /video-thumbnails/{file}", s.thumbnail)
 	mux.HandleFunc("GET /api/playlists", s.getPlaylists)
 	mux.HandleFunc("POST /api/playlists", member(s.addPlaylist))
 	mux.HandleFunc("DELETE /api/playlists/{id}", member(s.deletePlaylist))

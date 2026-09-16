@@ -167,6 +167,15 @@ De sessiecookie en de PVC blijven bestaan bij herladen en deployen. Een tab die 
 - `GET /api/playlists` is openbaar; `POST /api/playlists` en `DELETE /api/playlists/{id}` vereisen ledenrechten en een geldige Origin. Alleen Spotify-playlistlinks worden geaccepteerd; titels zijn optioneel. De speler wordt door Spotify geleverd. Verwijderen is herstelbaar door dezelfde link opnieuw toe te voegen. De contentrevisie vernieuwt de lijst in andere browsers zonder bestaande spelers opnieuw te laden.
 - Schema 5 voegt playlists en eenmalig de afgesproken eerste playlist toe. Bestaande content en verwijderde playlists blijven bij herstart behouden.
 
+### Videofragmenten, thumbnails en YouTube-tijdstippen
+
+- Beide mediapagina’s hebben even grote kaarten. Via **Bewerken → Video** kunnen leden een begin, einde en thumbnailmoment kiezen uit de volledige opgeslagen upload. De publieke MP4 begint bij nul en heeft de lengte van het gekozen fragment. Alle tijden in de editor verwijzen naar de volledige bron.
+- **Bewerken → Tijdstippen** bij YouTube bewaart een starttijd, optionele eindtijd en maximaal 40 benoemde oefeningen. Knoppen onder de speler openen het betreffende moment. YouTube behoudt zijn eigen tijdlijn; startmomenten volgen de precisie van de YouTube-speler. Dezelfde video mag op meerdere oefenkaarten staan.
+- Schema 6 voegt `media_playback` en `media_clip_jobs` toe in SQLite en PostgreSQL. Bestaande media worden niet aangepast. `GET /api/media/{id}/editing` en `/source` zijn alleen voor toegestane leden. De volledige bron van een ingekorte video wordt niet meer via de publieke video-URL geserveerd.
+- `POST /api/media/{id}/clip` controleert de contentrevisie, grenzen en beschikbare opslag en antwoordt met 202. `GET .../clip` geeft de verwerkingsstatus. Eén FFmpeg-taak tegelijk, gedeeld met uploads; maximaal 30 minuten verwerking. Het fragment en JPEG-thumbnail staan op de video-PVC. Alleen na succesvolle verwerking worden ze transactioneel gepubliceerd; vorige afgeleide bestanden worden dan opgeruimd. De volledige genormaliseerde bron blijft bewaard.
+- Een herstart breekt een lopende bewerking af met een herstelbare foutmelding. De gepubliceerde versie blijft behouden; het lid kan de bewerking opnieuw starten. Verwijderen tijdens verwerking verhindert publicatie. Prullenbak/herstellen geldt voor bron, afspeelversie en thumbnail. SQLite-back-ups omvatten alle drie en blokkeren gelijktijdige vervanging van afgeleide bestanden.
+- `PATCH /api/media/{id}/youtube` bewaart gevalideerde start/eindtijden en hoofdstukken met revisiecontrole. Schrijfacties vereisen de bestaande ledenrechten en Origin-controle.
+
 ### Uploads en opslag
 
 - `GET /api/media`: openbare bibliotheek en revisie; Google-subjecten en e-mailadressen van auteurs worden niet teruggegeven.

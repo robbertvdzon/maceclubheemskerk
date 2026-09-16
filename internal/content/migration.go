@@ -46,7 +46,7 @@ func migrate(db *sql.DB, dialect string) error {
 		if err = tx.QueryRow("SELECT version FROM club_schema WHERE id=1 FOR UPDATE").Scan(&version); err != nil {
 			return err
 		}
-		if version > 5 {
+		if version > 6 {
 			return errors.New("database schema is newer than this application")
 		}
 		if version < 3 {
@@ -67,13 +67,21 @@ func migrate(db *sql.DB, dialect string) error {
 				return err
 			}
 		}
+		if version < 6 {
+			if err = migratePlayback(tx); err != nil {
+				return err
+			}
+			if _, err = tx.Exec("UPDATE club_schema SET version=6 WHERE id=1"); err != nil {
+				return err
+			}
+		}
 		return tx.Commit()
 	}
 	var version int
 	if err = tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 5 {
+	if version > 6 {
 		return errors.New("database schema is newer than this application")
 	}
 	if version == 0 {
@@ -109,7 +117,12 @@ func migrate(db *sql.DB, dialect string) error {
 			return err
 		}
 	}
-	if _, err = tx.Exec("PRAGMA user_version=5"); err != nil {
+	if version < 6 {
+		if err = migratePlayback(tx); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec("PRAGMA user_version=6"); err != nil {
 		return err
 	}
 	return tx.Commit()

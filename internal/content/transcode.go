@@ -117,3 +117,71 @@ func transcodeVideo(ctx context.Context, input, output string) error {
 }
 
 var _ io.Writer = (*boundedOutput)(nil)
+
+// The source is the app's normalized MP4, and each edit is rendered from that
+// full source to avoid quality loss from repeatedly trimming previous edits.
+func renderClip(ctx context.Context, input, output, thumbnail string, req clipRequest) error {
+	seconds := func(v float64) string { return strconv.FormatFloat(v, 'f', 3, 64) }
+	base := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-max_alloc", "67108864", "-threads", "2", "-protocol_whitelist", "file", "-f", "mov", "-enable_drefs", "0", "-use_absolute_path", "0"}
+	args := append(append([]string{}, base...), "-ss", seconds(req.Start), "-i", input, "-t", seconds(req.End-req.Start), "-map", "0:v:0", "-map", "0:a:0?", "-map_metadata", "-1", "-map_chapters", "-1", "-sn", "-dn", "-filter_threads", "1", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-maxrate", "4M", "-bufsize", "8M", "-threads", "2", "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-movflags", "+faststart", "-fs", strconv.FormatInt(maxChunkedVideoBytes, 10), "-f", "mp4", output)
+	run := func(args []string) error {
+		cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+		var stderr boundedOutput
+		cmd.Stderr = &stderr
+		if cmd.Run() != nil {
+			return errors.New("Het fragment kon niet worden verwerkt. De vorige versie is bewaard; probeer opnieuw.")
+		}
+		return nil
+	}
+	if err := run(args); err != nil {
+		return err
+	}
+	info, err := probeVideo(ctx, output)
+	if err != nil {
+		return err
+	}
+	duration, err := strconv.ParseFloat(info.Format.Duration, 64)
+	if err != nil || !finiteTime(duration) || math.Abs(duration-(req.End-req.Start)) > 0.15 {
+		return errors.New("Het fragment is onvolledig. Probeer een korter fragment.")
+	}
+	f, err := os.Open(output)
+	if err != nil {
+		return err
+	}
+	st, err := f.Stat()
+	if err == nil {
+		err = validateMP4(f, st.Size())
+	}
+	f.Close()
+	if err != nil {
+		return errors.New("Het verwerkte fragment is ongeldig.")
+	}
+	if st.Size() > maxChunkedVideoBytes {
+		return errors.New("Het fragment is te groot.")
+	}
+	args = append(append([]string{}, base...), "-ss", seconds(req.ThumbnailTime), "-i", input, "-map", "0:v:0", "-frames:v", "1", "-map_metadata", "-1", "-filter_threads", "1", "-vf", "scale=w='min(960,iw)':h='min(960,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2", "-q:v", "3", "-threads", "1", "-fs", "5242880", "-f", "image2", thumbnail)
+	if err = run(args); err != nil {
+		return err
+	}
+	for _, path := range []string{output, thumbnail} {
+		if err = os.Chmod(path, 0600); err != nil {
+			return err
+		}
+		f, err = os.OpenFile(path, os.O_RDWR, 0600)
+		if err != nil {
+			return err
+		}
+		st, err = f.Stat()
+		if err == nil && (st.Size() == 0 || (path == thumbnail && st.Size() > 5<<20)) {
+			err = errors.New("De thumbnail kon niet worden gemaakt.")
+		}
+		if err == nil {
+			err = f.Sync()
+		}
+		f.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}

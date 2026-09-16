@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -21,16 +22,18 @@ import (
 )
 
 type Item struct {
-	ID          int64  `json:"id"`
-	Section     string `json:"section"`
-	Type        string `json:"type"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Category    string `json:"category"`
-	YouTube     string `json:"youtube,omitempty"`
-	Photo       string `json:"photo,omitempty"`
-	CreatedAt   string `json:"createdAt"`
-	Video       string `json:"video,omitempty"`
+	ID          int64    `json:"id"`
+	Section     string   `json:"section"`
+	Type        string   `json:"type"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Category    string   `json:"category"`
+	YouTube     string   `json:"youtube,omitempty"`
+	Photo       string   `json:"photo,omitempty"`
+	CreatedAt   string   `json:"createdAt"`
+	Video       string   `json:"video,omitempty"`
+	Thumbnail   string   `json:"thumbnail,omitempty"`
+	Playback    Playback `json:"playback"`
 	videoFile   string
 }
 type Library struct {
@@ -38,6 +41,9 @@ type Library struct {
 	Revision int64  `json:"revision"`
 }
 type Store struct {
+	assetMu       sync.Mutex
+	editMu        sync.Mutex
+	editCancel    context.CancelFunc
 	db            *sql.DB
 	dir           string
 	dialect       string
@@ -115,6 +121,10 @@ func OpenWithVideoDir(databaseURL, videoDir string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err = s.recoverClips(); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -136,6 +146,11 @@ func (s *Store) bind(query string) string {
 }
 
 func (s *Store) Close() error {
+	s.editMu.Lock()
+	if s.editCancel != nil {
+		s.editCancel()
+	}
+	s.editMu.Unlock()
 	s.uploadMu.Lock()
 	for _, upload := range s.chunkUploads {
 		if upload.processing {
@@ -172,14 +187,14 @@ func (s *Store) List(ctx context.Context) (Library, error) {
 	if err = tx.QueryRowContext(ctx, "SELECT revision FROM content_state WHERE id=1").Scan(&out.Revision); err != nil {
 		return out, err
 	}
-	rows, err := tx.QueryContext(ctx, "SELECT id,section,kind,title,description,category,youtube_id,photo_file,created_at,video_file FROM media WHERE deleted_at='' ORDER BY sort_order,id DESC")
+	rows, err := tx.QueryContext(ctx, "SELECT m.id,section,kind,title,description,category,youtube_id,photo_file,created_at,video_file,COALESCE(p.render_file,''),COALESCE(p.thumbnail_file,''),COALESCE(p.start_time,0),COALESCE(p.end_time,0),COALESCE(p.thumbnail_time,0),COALESCE(p.chapters,'[]') FROM media m LEFT JOIN media_playback p ON p.media_id=m.id WHERE deleted_at='' ORDER BY sort_order,m.id DESC")
 	if err != nil {
 		return out, err
 	}
 	for rows.Next() {
 		var i Item
-		var file string
-		if err = rows.Scan(&i.ID, &i.Section, &i.Type, &i.Title, &i.Description, &i.Category, &i.YouTube, &file, &i.CreatedAt, &i.videoFile); err != nil {
+		var file, render, thumb, chapters string
+		if err = rows.Scan(&i.ID, &i.Section, &i.Type, &i.Title, &i.Description, &i.Category, &i.YouTube, &file, &i.CreatedAt, &i.videoFile, &render, &thumb, &i.Playback.Start, &i.Playback.End, &i.Playback.ThumbnailTime, &chapters); err != nil {
 			rows.Close()
 			return out, err
 		}
@@ -188,6 +203,16 @@ func (s *Store) List(ctx context.Context) (Library, error) {
 		}
 		if i.videoFile != "" {
 			i.Video = "/videos/" + i.videoFile
+		}
+		if render != "" {
+			i.Video = "/videos/" + render
+		}
+		if thumb != "" {
+			i.Thumbnail = "/video-thumbnails/" + thumb
+		}
+		if err = json.Unmarshal([]byte(chapters), &i.Playback.Chapters); err != nil {
+			rows.Close()
+			return out, err
 		}
 		out.Items = append(out.Items, i)
 	}
