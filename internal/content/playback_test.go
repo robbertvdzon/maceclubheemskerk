@@ -179,3 +179,70 @@ func testPlaybackManagement(t *testing.T, s *Store, call func(string, string, st
 		t.Fatal("recovery changed published video")
 	}
 }
+
+func TestBackupStoreDoesNotInterruptRunningEdit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "club.sqlite")
+	videos := filepath.Join(dir, "videos")
+	first, err := OpenWithVideoDir(path, videos)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	item, err := first.Create(context.Background(), Item{Type: "video", Section: "training", videoFile: strings.Repeat("d", 32) + ".mp4"}, "member", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending := strings.Repeat("e", 32) + ".mp4"
+	os.WriteFile(filepath.Join(videos, pending), []byte("in progress"), 0600)
+	_, err = first.db.Exec("INSERT INTO media_clip_jobs(media_id,job_id,status,render_file,thumbnail_file) VALUES(?,?,'processing',?,'')", item.ID, "pending", pending)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := OpenWithVideoDir(path, videos)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	var status string
+	second.db.QueryRow("SELECT status FROM media_clip_jobs WHERE media_id=?", item.ID).Scan(&status)
+	if status != "processing" {
+		t.Fatal("opening backup store interrupted job")
+	}
+	if _, err = os.Stat(filepath.Join(videos, pending)); err != nil {
+		t.Fatal("pending file deleted", err)
+	}
+	unlock, err := first.lockVideoAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	acquired := make(chan error, 1)
+	go func() {
+		release, e := second.lockVideoAssets()
+		if e == nil {
+			release()
+		}
+		acquired <- e
+	}()
+	select {
+	case err := <-acquired:
+		unlock()
+		t.Fatalf("independent store ignored filesystem lock: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	unlock()
+	select {
+	case err := <-acquired:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("lock not released")
+	}
+	if err = first.RecoverVideoEdits(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(filepath.Join(videos, pending)); !os.IsNotExist(err) {
+		t.Fatal("server restart did not clean unfinished file")
+	}
+}

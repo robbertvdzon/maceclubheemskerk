@@ -121,10 +121,6 @@ func OpenWithVideoDir(databaseURL, videoDir string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if err = s.recoverClips(); err != nil {
-		db.Close()
-		return nil, err
-	}
 	return s, nil
 }
 

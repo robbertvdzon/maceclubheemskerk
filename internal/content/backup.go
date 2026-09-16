@@ -12,8 +12,11 @@ import (
 // Backup produces a consistent SQLite snapshot and the immutable photos it references.
 // New additions during the backup are included only if present in the SQLite snapshot.
 func (s *Store) Backup(ctx context.Context, destination string) error {
-	s.assetMu.Lock()
-	defer s.assetMu.Unlock()
+	unlock, err := s.lockVideoAssets()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	dir, err := os.MkdirTemp(s.dir, ".backup-")
 	if err != nil {
 		return err

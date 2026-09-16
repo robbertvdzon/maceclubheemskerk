@@ -36,6 +36,9 @@ func run() error {
 		return library.Backup(context.Background(), os.Args[2])
 	}
 
+	if err = library.RecoverVideoEdits(); err != nil {
+		return fmt.Errorf("recover video edits: %w", err)
+	}
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

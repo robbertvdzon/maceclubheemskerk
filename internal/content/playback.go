@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -301,8 +302,12 @@ func (s *Store) processClip(ctx context.Context, id int64, source, render, thumb
 	if err == nil {
 		err = syncDirectory(s.videoDir)
 	}
-	s.assetMu.Lock()
-	defer s.assetMu.Unlock()
+	unlock, lockErr := s.lockVideoAssets()
+	if lockErr != nil {
+		err = lockErr
+	} else {
+		defer unlock()
+	}
 	if err == nil {
 		err = s.publishClip(ctx, id, render, thumb, req)
 	}
@@ -374,4 +379,31 @@ func (s *Store) recoverClips() error {
 	}
 	_, err = s.db.Exec("UPDATE media_clip_jobs SET status='error',error='De verwerking is onderbroken door een herstart. De vorige versie is bewaard; sla je fragment opnieuw op.' WHERE status='processing'")
 	return err
+}
+
+// Backup is also available as a separate CLI process. An OS file lock protects
+// snapshot-referenced derivatives until the archive has finished copying them.
+func (s *Store) lockVideoAssets() (func(), error) {
+	s.assetMu.Lock()
+	f, err := os.OpenFile(filepath.Join(s.videoDir, ".media-assets.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		s.assetMu.Unlock()
+		return nil, err
+	}
+	if err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		s.assetMu.Unlock()
+		return nil, err
+	}
+	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close(); s.assetMu.Unlock() }, nil
+}
+
+// Call only when starting the server, never merely when opening a store for backup.
+func (s *Store) RecoverVideoEdits() error {
+	unlock, err := s.lockVideoAssets()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return s.recoverClips()
 }
