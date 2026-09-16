@@ -32,7 +32,7 @@ func TestPublicPageCacheHeadersVersionAndProtectedAccount(t *testing.T) {
 
 func TestSeparatePublicPages(t *testing.T) {
 	h := Handler(auth.New(auth.Config{}, nil, nil), strings.Repeat("b", 64))
-	markers := map[string]string{"/": "home-links", "/fotos-en-filmpjes": `data-library="training"`, "/oefeningen": `data-library="exercise"`, "/wie-zijn-wij": `class="members"`, "/bingo": `id="bingo-grid"`}
+	markers := map[string]string{"/": `id="hero-title"`, "/fotos-en-filmpjes": `data-library="training"`, "/oefeningen": `data-library="exercise"`, "/wie-zijn-wij": `class="members"`, "/bingo": `id="bingo-grid"`}
 	for path, marker := range markers {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
