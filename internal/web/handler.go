@@ -42,6 +42,7 @@ func Handler(a *auth.Auth, version string, stores ...*content.Store) http.Handle
 		"GET /playlists.js":   "static/playlists.js",
 		"GET /style.css":      "static/style.css", "GET /app.js": "static/app.js",
 		"GET /robbert-approved.webp":   "static/robbert-approved.webp",
+		"GET /sexy-steve.webp":         "static/sexy-steve.webp",
 		"GET /steve-approved.webp":     "static/steve-approved.webp",
 		"GET /club-approved.webp":      "static/club-approved.webp",
 		"GET /stephaan-caricature.png": "static/stephaan-caricature.png",

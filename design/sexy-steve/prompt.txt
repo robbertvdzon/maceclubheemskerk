@@ -1,0 +1,9 @@
+Generated with the built-in image_gen tool.
+References: internal/web/static/steve-approved.webp (identity and style) and the supplied photo (shorts).
+
+Use case: illustration-story.
+Create a new polished humorous caricature poster for Mace Club Heemskerk titled "SEXY STEVE".
+Input image 1 is the reference for Steve's identity and the illustration style: preserve recognizable middle-aged face, short gray-white beard, backwards beige cap, dark sunglasses, black Mace Club Heemskerk shirt, red superhero cape, muscular arms. Match the hand-drawn ink outlines, textured colored pencil/comic shading, cream parchment background with olive and burnt-orange diagonal brush strokes.
+Input image 2 is ONLY the clothing reference: black short running shorts with an asymmetric pattern of pale blue and silver sparkling dots, and a small silver starburst. Exaggerate the shorts humorously: noticeably shorter athletic running shorts, snug but fully opaque with normal modest coverage, curved side splits and comically dazzling enlarged sparkling dot patterns. Make this tiny flamboyant sportswear the visual joke. Strong athletic thighs and confident cheeky smile; friendly club banter.
+Composition: portrait poster 2:3, show entire character from cap to white trainers with black socks, all limbs inside frame. One hand on hip in a playful confident superhero stance, the other holding one large black steel mace vertically beside him, red cape behind body leaving the shorts clearly visible. Keep face recognizable from image 1. Outfit proportions and pose must make shorts prominent.
+Typography: large bold condensed black title at bottom, exact text "SEXY STEVE". No subtitle, no other slogans. Small existing shirt club emblem can remain. No additional people. Finished vintage sports caricature consistent with the reference.

@@ -16,3 +16,16 @@ Er is voor deze plaatsing niets opnieuw getekend.
 De uitsneden staan in `internal/web/static/index.html`. Het clipPath voorkomt dat
 andere portretten of de in de afbeelding opgenomen teksten zichtbaar worden.
 Lennart gebruikt dezelfde goedgekeurde illustratie op de bingopagina.
+
+## Sexy Steve — 20 november 2026
+
+Steve gebruikt nu `internal/web/static/sexy-steve.webp`, een verliesvrije WebP van
+`design/sexy-steve/sexy-steve-v1.png`. De uitsnede toont de hele figuur met de korte
+glitterbroek; de postertekst is vervangen door de HTML-titel “Sexy Steve”.
+
+De oude afbeelding blijft ongewijzigd in `internal/web/static/steve-approved.webp`
+en blijft bereikbaar via `/steve-approved.webp`. Terugzetten: verander bij Steve
+in `index.html` de afbeelding naar `/steve-approved.webp?v={{.Version}}`, zet
+viewBox en clipPath terug naar `0 90 1024 1125` (rect x=0, y=90, width=1024,
+height=1125), herstel SVG width=1024 en height=1125, de titel “Smelly Steve” en
+de alttekst “Smelly Steve met één zware mace en twee maces over zijn schouders”.
