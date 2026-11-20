@@ -207,3 +207,8 @@ Alleen bij een SQLite-installatie kan hetzelfde commando via `oc exec` worden ge
 Herstellen: stop de applicatie, bewaar de huidige `/data` en `/videos` apart, pak de zip uit naar een lege datamap (database en `uploads/` samen), zet de uitgepakte `videos/`-inhoud op de aparte `VIDEO_DIR`-mount, herstel passende eigenaar/rechten en start de app. Leg geen oude `-wal`/`-shm` naast een herstelde database. Sessies worden niet in de contentback-up opgenomen; behoud het bestaande `sessions.json` apart voor blijvende logins. Kopieer nooit alleen een actief SQLite-hoofdbestand voor een back-up.
 
 Tests controleren SQLite-heropening, backup/herstel met foto’s, Origin en ledenrechten, uploadvalidatie, normalisatie en bescherming tegen toegang tot andere bestanden. Echte Google-productielogins worden niet automatisch getest.
+
+Playlists worden vanaf schema 7 op opgeslagen volgorde getoond. Bestaande playlists
+starten met de nieuwste bovenaan; toevoegen of opnieuw toevoegen plaatst een playlist
+bovenaan. Clubleden kunnen via **Bewerken** en **Omhoog / Omlaag** de volgorde
+aanpassen. De volgorde blijft bewaard na herstarten.

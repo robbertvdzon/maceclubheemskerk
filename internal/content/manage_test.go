@@ -91,7 +91,7 @@ func TestManagementAndMigration(t *testing.T) {
 				mux.ServeHTTP(w, r)
 				return w
 			}
-			for _, route := range []struct{ method, path string }{{"PATCH", "/api/media/1"}, {"DELETE", "/api/media/1"}, {"POST", "/api/media/1/move"}, {"POST", "/api/media/1/restore"}, {"PATCH", "/api/bingo/1"}, {"GET", "/api/media/trash"}, {"GET", "/api/media/1/source"}, {"GET", "/api/media/1/editing"}, {"GET", "/api/media/1/clip"}, {"POST", "/api/media/1/clip"}, {"PATCH", "/api/media/1/youtube"}, {"POST", "/api/playlists"}, {"DELETE", "/api/playlists/4zbpTuVArXmyTCdaBXOudH"}} {
+			for _, route := range []struct{ method, path string }{{"PATCH", "/api/media/1"}, {"DELETE", "/api/media/1"}, {"POST", "/api/media/1/move"}, {"POST", "/api/media/1/restore"}, {"PATCH", "/api/bingo/1"}, {"GET", "/api/media/trash"}, {"GET", "/api/media/1/source"}, {"GET", "/api/media/1/editing"}, {"GET", "/api/media/1/clip"}, {"POST", "/api/media/1/clip"}, {"PATCH", "/api/media/1/youtube"}, {"POST", "/api/playlists"}, {"DELETE", "/api/playlists/4zbpTuVArXmyTCdaBXOudH"}, {"POST", "/api/playlists/4zbpTuVArXmyTCdaBXOudH/move"}} {
 				for _, who := range []struct {
 					token string
 					want  int
@@ -250,13 +250,63 @@ func TestManagementAndMigration(t *testing.T) {
 			if list().Revision != before+1 || len(playlists()) != 2 {
 				t.Fatal("playlist insert/duplicate failed")
 			}
+			// Reproduce the schema-6 upgrade with existing playlists before testing manual order.
+			if _, err := s.db.Exec("DROP TABLE playlist_order"); err != nil {
+				t.Fatal(err)
+			}
+			versionQuery := "PRAGMA user_version=6"
+			if dialect == "postgres" {
+				versionQuery = "UPDATE club_schema SET version=6 WHERE id=1"
+			}
+			if _, err := s.db.Exec(versionQuery); err != nil {
+				t.Fatal(err)
+			}
+			if err := migrate(s.db, dialect); err != nil {
+				t.Fatal(err)
+			}
+			if got := playlists(); got[0].ID != "abcdefghijklmnopqrstuv" {
+				t.Fatal("new playlist is not first", got)
+			}
+			call("POST", "/api/playlists/abcdefghijklmnopqrstuv/move", `{"direction":"down","revision":0}`, 409)
+			mutate("POST", "/api/playlists/abcdefghijklmnopqrstuv/move", `,"direction":"sideways"`, 400)
+			mutate("POST", "/api/playlists/unknown/move", `,"direction":"up"`, 404)
+			before = list().Revision
+			mutate("POST", "/api/playlists/abcdefghijklmnopqrstuv/move", `,"direction":"up"`, 200)
+			if list().Revision != before {
+				t.Fatal("boundary move changed revision")
+			}
+			mutate("POST", "/api/playlists/abcdefghijklmnopqrstuv/move", `,"direction":"down"`, 200)
+			if got := playlists(); got[1].ID != "abcdefghijklmnopqrstuv" {
+				t.Fatal("move down failed", got)
+			}
+			if err := migrate(s.db, dialect); err != nil {
+				t.Fatal(err)
+			}
+			if got := playlists(); got[1].ID != "abcdefghijklmnopqrstuv" {
+				t.Fatal("saved order lost on migration", got)
+			}
+			s.Close()
+			s, e = OpenWithVideoDir(target, filepath.Join(dir, "videos"))
+			if e != nil {
+				t.Fatal(e)
+			}
+			s.dir = dir
+			mux = http.NewServeMux()
+			s.Register(mux, a)
+			if got := playlists(); got[1].ID != "abcdefghijklmnopqrstuv" {
+				t.Fatal("saved order lost on restart", got)
+			}
+			mutate("POST", "/api/playlists/abcdefghijklmnopqrstuv/move", `,"direction":"up"`, 200)
+			if got := playlists(); got[0].ID != "abcdefghijklmnopqrstuv" {
+				t.Fatal("move up failed", got)
+			}
 			call("DELETE", "/api/playlists/abcdefghijklmnopqrstuv", `{"revision":0}`, 409)
 			mutate("DELETE", "/api/playlists/abcdefghijklmnopqrstuv", "", 200)
 			if len(playlists()) != 1 {
 				t.Fatal("playlist not hidden")
 			}
 			call("POST", "/api/playlists", payload, 201)
-			if got := playlists(); len(got) != 2 || got[1].Title != "Clubmuziek" {
+			if got := playlists(); len(got) != 2 || got[0].Title != "Clubmuziek" {
 				t.Fatal("playlist not restored", got)
 			}
 			// A removed initial playlist must not be reseeded by startup/migration.

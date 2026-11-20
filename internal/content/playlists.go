@@ -48,7 +48,7 @@ func (s *Store) getPlaylists(w http.ResponseWriter, r *http.Request) {
 		failure(w, 503, "Laden mislukt.")
 		return
 	}
-	rows, err := tx.QueryContext(r.Context(), "SELECT spotify_id,title FROM playlists WHERE deleted_at='' ORDER BY created_at,spotify_id")
+	rows, err := tx.QueryContext(r.Context(), "SELECT p.spotify_id,p.title FROM playlists p JOIN playlist_order o ON o.spotify_id=p.spotify_id WHERE p.deleted_at='' ORDER BY o.sort_order,p.spotify_id")
 	if err != nil {
 		failure(w, 503, "Laden mislukt.")
 		return
@@ -102,6 +102,11 @@ func (s *Store) addPlaylist(w http.ResponseWriter, r *http.Request, _ auth.User)
 		failure(w, 503, "Opslaan mislukt.")
 		return
 	}
+	var position int64
+	if err = tx.QueryRowContext(r.Context(), "SELECT COALESCE(MIN(sort_order),0)-1 FROM playlist_order").Scan(&position); err != nil {
+		failure(w, 503, "Opslaan mislukt.")
+		return
+	}
 	var deleted string
 	err = tx.QueryRowContext(r.Context(), s.bind("SELECT deleted_at FROM playlists WHERE spotify_id=?"), id).Scan(&deleted)
 	switch {
@@ -114,6 +119,10 @@ func (s *Store) addPlaylist(w http.ResponseWriter, r *http.Request, _ auth.User)
 		_, err = tx.ExecContext(r.Context(), s.bind("INSERT INTO playlists(spotify_id,title,created_at) VALUES(?,?,?)"), id, body.Title, time.Now().UTC().Format(time.RFC3339Nano))
 	}
 	if err != nil {
+		failure(w, 503, "Opslaan mislukt.")
+		return
+	}
+	if _, err = tx.ExecContext(r.Context(), s.bind("INSERT INTO playlist_order(spotify_id,sort_order) VALUES(?,?) ON CONFLICT(spotify_id) DO UPDATE SET sort_order=excluded.sort_order"), id, position); err != nil {
 		failure(w, 503, "Opslaan mislukt.")
 		return
 	}
@@ -179,4 +188,86 @@ func migratePlaylists(tx *sql.Tx) error {
  VALUES('4zbpTuVArXmyTCdaBXOudH','Arbeids Vitaminen Top 2000 Hits jaren 60-70-80','2026-09-16T00:00:00Z')
  ON CONFLICT(spotify_id) DO NOTHING;`)
 	return err
+}
+
+// Version 7 gives existing playlists newest-first positions without resetting a saved order.
+func migratePlaylistOrder(tx *sql.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE IF NOT EXISTS playlist_order (
+ spotify_id TEXT PRIMARY KEY REFERENCES playlists(spotify_id), sort_order BIGINT NOT NULL
+ );
+ INSERT INTO playlist_order(spotify_id,sort_order)
+ SELECT spotify_id,ROW_NUMBER() OVER (ORDER BY created_at DESC,spotify_id) FROM playlists WHERE true
+ ON CONFLICT(spotify_id) DO NOTHING;`)
+	return err
+}
+
+func (s *Store) movePlaylist(w http.ResponseWriter, r *http.Request, _ auth.User) {
+	var body struct {
+		Direction string
+		Revision  int64
+	}
+	if !decodeSmall(w, r, &body) {
+		return
+	}
+	if body.Direction != "up" && body.Direction != "down" {
+		failure(w, 400, "Kies omhoog of omlaag.")
+		return
+	}
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		failure(w, 503, "Verplaatsen mislukt.")
+		return
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(r.Context(), s.bind("UPDATE content_state SET revision=revision+1 WHERE id=1 AND revision=?"), body.Revision)
+	if err != nil {
+		failure(w, 503, "Verplaatsen mislukt.")
+		return
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		failure(w, 503, "Verplaatsen mislukt.")
+		return
+	}
+	if n == 0 {
+		failure(w, 409, "De lijst is intussen gewijzigd. Probeer het opnieuw.")
+		return
+	}
+	id := r.PathValue("id")
+	var position int64
+	err = tx.QueryRowContext(r.Context(), s.bind("SELECT o.sort_order FROM playlist_order o JOIN playlists p ON p.spotify_id=o.spotify_id WHERE p.spotify_id=? AND p.deleted_at=''"), id).Scan(&position)
+	if errors.Is(err, sql.ErrNoRows) {
+		failure(w, 404, "Playlist niet gevonden.")
+		return
+	}
+	if err != nil {
+		failure(w, 503, "Verplaatsen mislukt.")
+		return
+	}
+	query := "SELECT o.spotify_id,o.sort_order FROM playlist_order o JOIN playlists p ON p.spotify_id=o.spotify_id WHERE p.deleted_at='' AND o.sort_order<? ORDER BY o.sort_order DESC LIMIT 1"
+	if body.Direction == "down" {
+		query = "SELECT o.spotify_id,o.sort_order FROM playlist_order o JOIN playlists p ON p.spotify_id=o.spotify_id WHERE p.deleted_at='' AND o.sort_order>? ORDER BY o.sort_order LIMIT 1"
+	}
+	var neighbor string
+	var other int64
+	err = tx.QueryRowContext(r.Context(), s.bind(query), position).Scan(&neighbor, &other)
+	if errors.Is(err, sql.ErrNoRows) {
+		send(w, 200, map[string]bool{"ok": true})
+		return
+	}
+	if err == nil {
+		_, err = tx.ExecContext(r.Context(), s.bind("UPDATE playlist_order SET sort_order=? WHERE spotify_id=?"), other, id)
+	}
+	if err == nil {
+		_, err = tx.ExecContext(r.Context(), s.bind("UPDATE playlist_order SET sort_order=? WHERE spotify_id=?"), position, neighbor)
+	}
+	if err != nil {
+		failure(w, 503, "Verplaatsen mislukt.")
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		failure(w, 503, "Verplaatsen mislukt.")
+		return
+	}
+	send(w, 200, map[string]bool{"ok": true})
 }
